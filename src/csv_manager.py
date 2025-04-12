@@ -69,30 +69,48 @@ class CSVManager:
         with open(csv_path, "r") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                if "Date" in row and "Time" in row:
-                    # Combine date and time into ISO format string
-                    date_str = row["Date"].strip() if row["Date"] else ""
-                    time_str = row["Time"].strip() if row["Time"] else ""
+                # Validate time field is present
+                if "Time" not in row or not row["Time"].strip():
+                    raise ValueError("Time field is required in CSV file")
 
-                    if date_str and time_str:
-                        iso_time = f"{date_str}T{time_str}"
-                    elif date_str:  # Only date, default time to midnight
-                        iso_time = f"{date_str}T00:00:00"
-                    elif time_str:  # Only time, default date to today
-                        today = datetime.now().replace(tzinfo=None).strftime("%Y-%m-%d")
-                        iso_time = f"{today}T{time_str}"
-                    else:
-                        iso_time = ""
-                elif "Time" in row:  # Old format with combined date/time
-                    iso_time = row["Time"]
+                # Validate title field is present
+                if "Title" not in row or not row["Title"].strip():
+                    raise ValueError("Title field is required in CSV file")
+
+                # Validate description field is present
+                if "Description" not in row or not row["Description"].strip():
+                    raise ValueError("Description field is required in CSV file")
+
+                time_str = row["Time"].strip()
+
+                # Handle date if present
+                date_str = ""
+                if "Date" in row and row["Date"]:
+                    date_str = row["Date"].strip()
+                    try:
+                        # Validate date format if provided
+                        datetime.strptime(date_str, "%Y-%m-%d")
+                    except ValueError:
+                        raise ValueError(f"Invalid date format in CSV: {date_str}")
+
+                # Construct ISO time string
+                if date_str:
+                    iso_time = f"{date_str}T{time_str}"
                 else:
-                    iso_time = ""
+                    today = datetime.now().replace(tzinfo=None).strftime("%Y-%m-%d")
+                    iso_time = f"{today}T{time_str}"
+
+                # Validate the complete datetime
+                try:
+                    datetime.fromisoformat(iso_time)
+                except ValueError:
+                    raise ValueError(f"Invalid time format in CSV: {time_str}")
 
                 event = {
                     "time": iso_time,
                     "video_path": row.get("Video", ""),
-                    "title": row.get("Title", ""),
-                    "description": row.get("Description", ""),
+                    "title": row["Title"].strip(),
+                    "description": row["Description"].strip(),
                 }
                 events.append(event)
 

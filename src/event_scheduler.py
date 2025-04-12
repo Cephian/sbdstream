@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+import sys
 from dateutil import parser
 
 from PySide6.QtCore import QObject, Signal, QTimer
@@ -64,7 +65,11 @@ class EventScheduler(QObject):
         self.csv_path = csv_path
 
         # Use CSVManager to load events
-        event_dicts = CSVManager.load_events(csv_path)
+        try:
+            event_dicts = CSVManager.load_events(csv_path)
+        except ValueError as e:
+            print(f"Error loading CSV file: {e}", file=sys.stderr)
+            exit(1)
         self.events = []
 
         for event_dict in event_dicts:

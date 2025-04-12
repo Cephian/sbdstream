@@ -15,7 +15,4 @@ setup(
         ],
     },
     include_package_data=True,
-    data_files=[
-        ('data', ['data/schedule.csv']),
-    ],
 ) 
