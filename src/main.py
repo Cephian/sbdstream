@@ -37,7 +37,7 @@ def main():
     scheduler.event_finished.connect(visual_window.show_countdown)
     scheduler.update_countdown.connect(visual_window.update_countdown)
     scheduler.all_events_signal.connect(console_window.update_events)
-    scheduler.current_event_signal.connect(console_window.highlight_current_event)
+    scheduler.current_event_signal.connect(console_window.update_display_state)
     console_window.event_edited.connect(scheduler.update_event)
     console_window.event_triggered.connect(scheduler.trigger_event)
     visual_window.video_finished.connect(scheduler.handle_video_finished)
