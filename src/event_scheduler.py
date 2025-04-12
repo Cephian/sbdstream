@@ -431,6 +431,10 @@ class EventScheduler(QObject):
                 self.current_event_index = new_active_event_index
                 self.current_event_signal.emit(self.current_event_index) # Signal only if changed
 
+            # Always update the countdown if a scheduled event's time was changed
+            if new_event.time is not None or original_event.time is not None:
+                self._update_state_after_event()
+
             # --- Persist Changes ---
             # 6. Save changes to CSV
             self.save_to_csv()
