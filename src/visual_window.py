@@ -33,19 +33,11 @@ class VisualWindow(QMainWindow):
         self.countdown_widget = QWidget()
         countdown_layout = QVBoxLayout(self.countdown_widget)
 
-        # Add current event heading
-        current_heading = QLabel("Currently showing:")
-        current_heading.setAlignment(Qt.AlignCenter)
-        current_heading_font = QFont()
-        current_heading_font.setPointSize(16)
-        current_heading.setFont(current_heading_font)
-        countdown_layout.addWidget(current_heading)
-
         # Add title label
         self.title_label = QLabel("SBDStream")
         self.title_label.setAlignment(Qt.AlignCenter)
         title_font = QFont()
-        title_font.setPointSize(24)
+        title_font.setPointSize(60)
         title_font.setBold(True)
         self.title_label.setFont(title_font)
         countdown_layout.addWidget(self.title_label)
@@ -55,7 +47,7 @@ class VisualWindow(QMainWindow):
         self.description_label.setAlignment(Qt.AlignCenter)
         self.description_label.setWordWrap(True)
         desc_font = QFont()
-        desc_font.setPointSize(14)
+        desc_font.setPointSize(18)
         desc_font.setItalic(True)
         self.description_label.setFont(desc_font)
         countdown_layout.addWidget(self.description_label)
@@ -66,12 +58,13 @@ class VisualWindow(QMainWindow):
         countdown_layout.addWidget(separator)
 
         # Add countdown label
-        countdown_heading = QLabel("Next event in:")
-        countdown_heading.setAlignment(Qt.AlignCenter)
+        self.countdown_heading = QLabel("Next event in:")
+        self.countdown_heading.setAlignment(Qt.AlignCenter)
+        self.countdown_heading.setFixedHeight(60)  # Set fixed height to reduce vertical space
         countdown_font = QFont()
         countdown_font.setPointSize(16)
-        countdown_heading.setFont(countdown_font)
-        countdown_layout.addWidget(countdown_heading)
+        self.countdown_heading.setFont(countdown_font)
+        countdown_layout.addWidget(self.countdown_heading)
 
         self.countdown_label = QLabel("--:--:--")
         self.countdown_label.setAlignment(Qt.AlignCenter)
@@ -96,19 +89,49 @@ class VisualWindow(QMainWindow):
 
     def set_dark_theme(self):
         palette = QPalette()
-        palette.setColor(QPalette.Window, QColor(53, 53, 53))
-        palette.setColor(QPalette.WindowText, Qt.white)
-        palette.setColor(QPalette.Base, QColor(25, 25, 25))
-        palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
-        palette.setColor(QPalette.ToolTipBase, Qt.white)
-        palette.setColor(QPalette.ToolTipText, Qt.white)
-        palette.setColor(QPalette.Text, Qt.white)
-        palette.setColor(QPalette.Button, QColor(53, 53, 53))
-        palette.setColor(QPalette.ButtonText, Qt.white)
-        palette.setColor(QPalette.BrightText, Qt.red)
-        palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
-        palette.setColor(QPalette.HighlightedText, Qt.black)
+        # Dark blue background
+        palette.setColor(QPalette.Window, QColor(15, 25, 45))
+        palette.setColor(QPalette.WindowText, QColor(230, 230, 255))
+        palette.setColor(QPalette.Base, QColor(20, 30, 50))
+        palette.setColor(QPalette.AlternateBase, QColor(30, 40, 60))
+        palette.setColor(QPalette.ToolTipBase, QColor(240, 240, 255))
+        palette.setColor(QPalette.ToolTipText, QColor(240, 240, 255))
+        palette.setColor(QPalette.Text, QColor(220, 220, 250))
+        palette.setColor(QPalette.Button, QColor(30, 40, 65))
+        palette.setColor(QPalette.ButtonText, QColor(230, 230, 255))
+        palette.setColor(QPalette.BrightText, QColor(255, 120, 120))
+        palette.setColor(QPalette.Highlight, QColor(65, 155, 255))
+        palette.setColor(QPalette.HighlightedText, QColor(15, 15, 35))
         self.setPalette(palette)
+
+        # Set specific colors and styles for the labels with a modern look
+        self.title_label.setStyleSheet("""
+            color: #FFFFFF;
+            border-bottom: 2px solid #4A88FF;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        """)
+
+        self.description_label.setStyleSheet("""
+            color: #A7C7FF;
+            background-color: rgba(30, 40, 70, 0.5);
+            padding: 10px;
+        """)
+
+        self.countdown_heading.setStyleSheet("color: #FF9D7A;")
+
+        self.countdown_label.setStyleSheet("""
+            color: #4AE0E0;
+            background-color: rgba(20, 35, 60, 0.7);
+            padding: 15px;
+            border: 1px solid #4A88FF;
+        """)
+
+        # Apply style to countdown widget background
+        self.countdown_widget.setStyleSheet("""
+            background-color: #17273A;
+            padding: 20px;
+        """)
 
     def play_video(self, video_path, title, description):
         # Update labels and current event info
