@@ -282,12 +282,12 @@ class ConsoleWindow(QMainWindow):
                 order_item.setText("")
 
         # Get current time for comparison
-        now = datetime.now()
+        now = datetime.now().replace(tzinfo=None)
 
         # Set "0" for current event regardless of its original timing
         current_order_item = self.event_table.item(self.current_index, 0)
         if current_order_item:
-            current_order_item.setText("0")
+            current_order_item.setText("Now")
 
         # Lists for future events and unscheduled events
         future_events = []
@@ -295,15 +295,14 @@ class ConsoleWindow(QMainWindow):
 
         # Categorize events relative to now
         for i, event in enumerate(self.events_data):
+            # We intentionally do not skip the first event, as later we want to tag it with both 0 AND any future number it may have.
+
             # For events with timestamps
             if event.time is not None:
-                event_time = parser.parse(event.time)
-
                 # If the event is in the future (compared to current time)
-                if event_time > now:
-                    future_events.append((i, event_time))
+                if event.time > now:
+                    future_events.append((i, event.time))
                 # Past events remain blank (already handled by initial clearing)
-            # Handle unscheduled events (not the current one)
             else:
                 # Unscheduled events will be numbered after scheduled future events
                 unscheduled_events.append(i)
@@ -318,9 +317,8 @@ class ConsoleWindow(QMainWindow):
         for row_idx, _ in future_events:
             order_item = self.event_table.item(row_idx, 0)
             if order_item:
-                # If this is the current event, show both its current (0) and future number
                 if row_idx == self.current_index:
-                    order_item.setText(f"0, {next_order}")
+                    order_item.setText(f"Now, {next_order}")
                 else:
                     order_item.setText(str(next_order))
                 next_order += 1
@@ -445,15 +443,15 @@ class ConsoleWindow(QMainWindow):
             event_dict["time"],
             event_dict["video_path"],
             event_dict["title"],
-            event_dict["description"]
+            event_dict["description"],
         )
 
         # Update events_data
         self.events_data[row] = new_event
-        
+
         # Save changes immediately
         self.save_to_csv()
-        
+
         # Update order column in case the event timing changed
         self.update_display_state()
 
@@ -465,12 +463,14 @@ class ConsoleWindow(QMainWindow):
             # Convert Event objects to dictionaries for CSV manager
             events_dict = []
             for event in self.events_data:
-                events_dict.append({
-                    "time": event.time_iso,
-                    "video_path": event.video_path,
-                    "title": event.title,
-                    "description": event.description,
-                })
+                events_dict.append(
+                    {
+                        "time": event.time_iso,
+                        "video_path": event.video_path,
+                        "title": event.title,
+                        "description": event.description,
+                    }
+                )
             CSVManager.save_events(self.csv_path, events_dict)
 
     def save_changes(self):
@@ -480,13 +480,15 @@ class ConsoleWindow(QMainWindow):
         # Convert Event objects to dictionaries for CSV manager
         events_dict = []
         for event in self.events_data:
-            events_dict.append({
-                "time": event.time_iso,
-                "video_path": event.video_path,
-                "title": event.title,
-                "description": event.description,
-            })
-            
+            events_dict.append(
+                {
+                    "time": event.time_iso,
+                    "video_path": event.video_path,
+                    "title": event.title,
+                    "description": event.description,
+                }
+            )
+
         success = CSVManager.save_events(self.csv_path, events_dict)
 
         if success:
@@ -510,7 +512,7 @@ class ConsoleWindow(QMainWindow):
                 event_data["time"],
                 event_data["video_path"],
                 event_data["title"],
-                event_data["description"]
+                event_data["description"],
             )
 
             # Add to events data
@@ -542,9 +544,14 @@ class ConsoleWindow(QMainWindow):
                     event.title == new_event.title
                     and event.description == new_event.description
                     and event.video_path == new_event.video_path
-                    and ((event.time is None and new_event.time is None) or
-                         (event.time is not None and new_event.time is not None and 
-                          event.time == new_event.time))
+                    and (
+                        (event.time is None and new_event.time is None)
+                        or (
+                            event.time is not None
+                            and new_event.time is not None
+                            and event.time == new_event.time
+                        )
+                    )
                 ):
                     index = i
                     break
