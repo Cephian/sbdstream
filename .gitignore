@@ -111,4 +111,5 @@ venv.bak/
 result
 result-*
 .direnv
-.devenv 
+.devenv
+.cursor/rules/sbdstream.mdc

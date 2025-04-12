@@ -30,18 +30,19 @@ class EventTableWidget(QTableWidget):
         super().__init__()
 
         # Set columns
-        self.setColumnCount(5)
+        self.setColumnCount(6)  # Increased to 6 for Order column
         self.setHorizontalHeaderLabels(
-            ["Date", "Time", "Video", "Title", "Description"]
+            ["Order", "Date", "Time", "Video", "Title", "Description"]
         )
 
         # Set properties
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
+        self.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
         self.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
 
         # Enable editing
         self.setEditTriggers(
@@ -58,7 +59,7 @@ class AddEventDialog(QDialog):
 
         # Create layout
         layout = QFormLayout(self)
-        
+
         # Create unscheduled checkbox
         self.unscheduled_checkbox = QCheckBox("Unscheduled Event")
         self.unscheduled_checkbox.stateChanged.connect(self.toggle_date_time)
@@ -114,7 +115,7 @@ class AddEventDialog(QDialog):
         button_layout.addWidget(self.cancel_button)
 
         layout.addRow("", button_layout)
-        
+
     def toggle_date_time(self, state):
         """Enable or disable date/time fields based on checkbox state"""
         is_unscheduled = state == Qt.Checked
@@ -123,7 +124,7 @@ class AddEventDialog(QDialog):
 
     def get_event_data(self):
         is_unscheduled = self.unscheduled_checkbox.isChecked()
-        
+
         if is_unscheduled:
             time_str = None
         else:
@@ -192,7 +193,7 @@ class ConsoleWindow(QMainWindow):
         self.remove_button = QPushButton("Remove Event")
         self.remove_button.clicked.connect(self.remove_event)
         button_layout.addWidget(self.remove_button)
-        
+
         # Add trigger button
         self.trigger_button = QPushButton("Trigger Event")
         self.trigger_button.clicked.connect(self.trigger_event)
@@ -252,27 +253,36 @@ class ConsoleWindow(QMainWindow):
                 formatted_date = dt.strftime("%Y-%m-%d")
                 formatted_time = dt.strftime("%H:%M:%S")
 
+            # Create order item (initially empty)
+            order_item = QTableWidgetItem("")
+            # Make the order column uneditable
+            order_item.setFlags(order_item.flags() & ~Qt.ItemIsEditable)
+            # Set a different background color for the order column
+            order_item.setBackground(QBrush(QColor("#2A4A4A")))
+            self.event_table.setItem(i, 0, order_item)
+
             # Add cells
             date_item = QTableWidgetItem(formatted_date)
             time_item = QTableWidgetItem(formatted_time)
-            
+
             # Style unscheduled events differently
             if event["time"] is None:
                 date_item.setBackground(QBrush(QColor("#3A2A4A")))
                 time_item.setBackground(QBrush(QColor("#3A2A4A")))
-                
-            self.event_table.setItem(i, 0, date_item)
-            self.event_table.setItem(i, 1, time_item)
-            self.event_table.setItem(i, 2, QTableWidgetItem(event["video_path"]))
-            self.event_table.setItem(i, 3, QTableWidgetItem(event["title"]))
-            self.event_table.setItem(i, 4, QTableWidgetItem(event["description"]))
+
+            self.event_table.setItem(i, 1, date_item)
+            self.event_table.setItem(i, 2, time_item)
+            self.event_table.setItem(i, 3, QTableWidgetItem(event["video_path"]))
+            self.event_table.setItem(i, 4, QTableWidgetItem(event["title"]))
+            self.event_table.setItem(i, 5, QTableWidgetItem(event["description"]))
 
         # Complete table updates before highlighting
         self.is_updating = False
 
-        # Highlight current event if any
+        # Highlight current event if any and update order numbers
         if self.current_index >= 0:
             self.highlight_current_event(self.current_index)
+            self.update_order_column()
 
     def highlight_current_event(self, index):
         self.current_index = index
@@ -282,24 +292,94 @@ class ConsoleWindow(QMainWindow):
 
         # Reset all row colors
         for i in range(self.event_table.rowCount()):
-            for j in range(self.event_table.columnCount()):
+            for j in range(1, self.event_table.columnCount()):  # Skip Order column (0)
                 item = self.event_table.item(i, j)
                 if item:
                     item.setBackground(QBrush())
 
         # Highlight the current event
         if index >= 0 and index < self.event_table.rowCount():
-            for j in range(self.event_table.columnCount()):
+            for j in range(1, self.event_table.columnCount()):  # Skip Order column (0)
                 item = self.event_table.item(index, j)
                 if item:
                     item.setBackground(QBrush(QColor(100, 100, 255, 100)))
 
+        # Update the order column when highlighting changes
+        self.update_order_column()
+
         # Reset highlighting flag
         self.is_highlighting = False
 
+    def update_order_column(self):
+        """Update the Order column to show relative position of future events"""
+        if self.current_index < 0:
+            return
+
+        # First, clear all order numbers
+        for i in range(self.event_table.rowCount()):
+            order_item = self.event_table.item(i, 0)
+            if order_item:
+                order_item.setText("")
+
+        # Get current time for comparison
+        now = datetime.now()
+
+        # Set "0" for current event regardless of its original timing
+        current_order_item = self.event_table.item(self.current_index, 0)
+        if current_order_item:
+            current_order_item.setText("0")
+
+        # Lists for future events and unscheduled events
+        future_events = []
+        unscheduled_events = []
+
+        # Categorize events relative to now
+        for i, event in enumerate(self.events_data):
+            # Skip the current event
+            if i == self.current_index:
+                continue
+
+            # For events with timestamps
+            if event["time"] is not None:
+                event_time = parser.parse(event["time"])
+
+                # If the event is in the future (compared to current time)
+                if event_time > now:
+                    future_events.append((i, event_time))
+                # Past events remain blank (already handled by initial clearing)
+            # Handle unscheduled events (not the current one)
+            else:
+                # Unscheduled events will be numbered after scheduled future events
+                unscheduled_events.append(i)
+
+        # Sort future events by time
+        future_events.sort(key=lambda x: x[1])
+
+        # Assign order numbers to future events
+        next_order = 1
+
+        # Number the scheduled future events first
+        for row_idx, _ in future_events:
+            order_item = self.event_table.item(row_idx, 0)
+            if order_item:
+                order_item.setText(str(next_order))
+                next_order += 1
+
+        # Then number any unscheduled events (other than the current one)
+        for row_idx in unscheduled_events:
+            order_item = self.event_table.item(row_idx, 0)
+            if order_item:
+                order_item.setText(str(next_order))
+                next_order += 1
+
     def cell_changed(self, row, column):
-        # Skip if we're just highlighting or updating the table
-        if self.is_updating or self.is_highlighting or row >= len(self.events_data):
+        # Skip if we're just highlighting or updating the table or if the column is Order
+        if (
+            self.is_updating
+            or self.is_highlighting
+            or row >= len(self.events_data)
+            or column == 0
+        ):
             return
 
         # Get new value
@@ -313,7 +393,7 @@ class ConsoleWindow(QMainWindow):
         event = self.events_data[row].copy()
 
         # Update the appropriate field
-        if column == 0:  # Date column
+        if column == 1:  # Date column
             if value.lower() == "unscheduled":
                 # Convert to an unscheduled event
                 event["time"] = None
@@ -328,7 +408,7 @@ class ConsoleWindow(QMainWindow):
                 time_part = dt.strftime("%H:%M:%S")
                 # Combine with new date
                 event["time"] = f"{value}T{time_part}"
-        elif column == 1:  # Time column
+        elif column == 2:  # Time column
             if value.lower() == "unscheduled":
                 # Convert to an unscheduled event
                 event["time"] = None
@@ -343,11 +423,11 @@ class ConsoleWindow(QMainWindow):
                 date_part = dt.strftime("%Y-%m-%d")
                 # Combine with new time
                 event["time"] = f"{date_part}T{value}"
-        elif column == 2:
-            event["video_path"] = value
         elif column == 3:
-            event["title"] = value
+            event["video_path"] = value
         elif column == 4:
+            event["title"] = value
+        elif column == 5:
             event["description"] = value
 
         # Update events_data
@@ -355,6 +435,9 @@ class ConsoleWindow(QMainWindow):
 
         # Save changes immediately
         self.save_to_csv()
+
+        # Update order column in case the event timing changed
+        self.update_order_column()
 
         # Emit signal to update the event
         self.event_edited.emit(row, event)
@@ -391,10 +474,10 @@ class ConsoleWindow(QMainWindow):
             # Sort and segregate events (scheduled vs unscheduled)
             scheduled_events = [e for e in self.events_data if e["time"] is not None]
             unscheduled_events = [e for e in self.events_data if e["time"] is None]
-            
+
             # Sort scheduled events by time
             scheduled_events.sort(key=lambda x: parser.parse(x["time"]))
-            
+
             # Rebuild events list with scheduled first, then unscheduled
             self.events_data = scheduled_events + unscheduled_events
 
@@ -404,15 +487,20 @@ class ConsoleWindow(QMainWindow):
             # Update table
             self.update_events(self.events_data)
 
+            # Update order column
+            self.update_order_column()
+
             # Find the new index of the added event
             for i, event in enumerate(self.events_data):
-                if (event["title"] == event_data["title"] and 
-                    event["description"] == event_data["description"] and
-                    event["video_path"] == event_data["video_path"] and
-                    event["time"] == event_data["time"]):
+                if (
+                    event["title"] == event_data["title"]
+                    and event["description"] == event_data["description"]
+                    and event["video_path"] == event_data["video_path"]
+                    and event["time"] == event_data["time"]
+                ):
                     index = i
                     break
-            
+
             # Emit signal for scheduler
             self.event_edited.emit(index, event_data)
 
@@ -454,29 +542,40 @@ class ConsoleWindow(QMainWindow):
             elif self.current_index > row:
                 self.current_index -= 1
 
+            # Update order column
+            self.update_order_column()
+
     def trigger_event(self):
         """
         Trigger the selected event to play immediately
         """
         selected_rows = self.event_table.selectedIndexes()
         if not selected_rows:
-            QMessageBox.warning(self, "No Event Selected", "Please select an event to trigger.")
+            QMessageBox.warning(
+                self, "No Event Selected", "Please select an event to trigger."
+            )
             return
-            
+
         # Get the selected row index (each click will create multiple indexes, one for each cell)
         selected_row = selected_rows[0].row()
-        
+
         # Confirm with the user
-        event_title = self.event_table.item(selected_row, 3).text()
+        event_title = self.event_table.item(selected_row, 4).text()
         confirm = QMessageBox.question(
             self,
             "Trigger Event",
             f"Do you want to trigger '{event_title}' now?",
             QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            QMessageBox.No,
         )
-        
+
         if confirm == QMessageBox.Yes:
+            # Set the current index to the selected row before emitting the signal
+            self.current_index = selected_row
+
+            # Update the highlight and order column to reflect the new current event
+            self.highlight_current_event(selected_row)
+
             # Emit the signal to trigger the event
             self.event_triggered.emit(selected_row)
 
