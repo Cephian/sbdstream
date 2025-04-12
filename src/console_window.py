@@ -403,7 +403,7 @@ class ConsoleWindow(QMainWindow):
 
         # Update the appropriate field
         if column == 1:  # Date column
-            if value.lower() == "unscheduled":
+            if value.lower() == "unscheduled" or value == "":
                 # Convert to an unscheduled event
                 event_dict["time"] = None
             elif event_dict["time"] is None:
@@ -418,7 +418,7 @@ class ConsoleWindow(QMainWindow):
                 # Combine with new date
                 event_dict["time"] = f"{value}T{time_part}"
         elif column == 2:  # Time column
-            if value.lower() == "unscheduled":
+            if value.lower() == "unscheduled" or value == "":
                 # Convert to an unscheduled event
                 event_dict["time"] = None
             elif event_dict["time"] is None:
