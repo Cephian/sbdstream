@@ -439,7 +439,7 @@ class ConsoleWindow(QMainWindow):
         self.event_edited.emit(row, event)
         
         # If title or description was changed, emit text_updated signal
-        if column == 4 or column == 5:
+        if (column == 4 or column == 5) and row == self.current_index:
             self.text_updated.emit(event.title, event.description)
 
     def save_to_csv(self):
