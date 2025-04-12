@@ -33,7 +33,7 @@ class Event:
 
     def to_dict(self):
         time_str = self.time.isoformat() if self.time is not None else None
-        
+
         return {
             "time": time_str,
             "video_path": self.video_path,
@@ -90,7 +90,7 @@ class EventScheduler(QObject):
                 event_dict["description"],
             )
             self.events.append(event)
-            
+
             # Separate scheduled and unscheduled events
             if event.time is None:
                 self.unscheduled_events.append(event)
@@ -99,7 +99,7 @@ class EventScheduler(QObject):
 
         # Sort scheduled events by time
         self.scheduled_events.sort(key=lambda x: x.time)
-        
+
         # Rebuild main events list with scheduled events first, then unscheduled
         self.events = self.scheduled_events + self.unscheduled_events
 
@@ -110,10 +110,7 @@ class EventScheduler(QObject):
         if not self.scheduled_events:
             # No scheduled events, just show a message
             self.event_finished.emit(
-                "No scheduled events",
-                0,
-                "SBDStream",
-                "No scheduled events found"
+                "No scheduled events", 0, "SBDStream", "No scheduled events found"
             )
             return
 
@@ -180,13 +177,13 @@ class EventScheduler(QObject):
             # In a real app, we'd check if video is still playing
             # For now, let's simulate video duration of 10 seconds
             current_event = self.events[self.current_event_index]
-            
+
             # Skip this check for unscheduled events
             if current_event.time is not None:
                 if (now - current_event.time).total_seconds() > 10:
                     # Video finished - but keep track of this as the current event
                     # Do NOT set self.current_event_index = -1
-    
+
                     if next_event_index >= 0:
                         next_event = self.scheduled_events[next_event_index]
                         seconds_to_next = int((next_event.time - now).total_seconds())
@@ -205,7 +202,7 @@ class EventScheduler(QObject):
                             current_event.title,
                             current_event.description,
                         )
-    
+
                     # Keep current_event_index as is, just update console window
                     self.current_event_signal.emit(self.current_event_index)
 
@@ -221,7 +218,10 @@ class EventScheduler(QObject):
                     next_event_full_index = i
                     break
 
-            if seconds_to_next <= 0 and self.current_event_index != next_event_full_index:
+            if (
+                seconds_to_next <= 0
+                and self.current_event_index != next_event_full_index
+            ):
                 # Stop countdown if running
                 if self.countdown_timer.isActive():
                     self.countdown_timer.stop()
@@ -240,20 +240,20 @@ class EventScheduler(QObject):
         """
         if 0 <= event_index < len(self.events):
             triggered_event = self.events[event_index]
-            
+
             # Stop countdown if running
             if self.countdown_timer.isActive():
                 self.countdown_timer.stop()
-                
+
             # Play the video for this event
             self.current_event_index = event_index
             self.event_started.emit(
-                triggered_event.video_path, 
-                triggered_event.title, 
-                triggered_event.description
+                triggered_event.video_path,
+                triggered_event.title,
+                triggered_event.description,
             )
             self.current_event_signal.emit(event_index)
-            
+
             # Find the next scheduled event and update seconds_to_next
             # (Will be used when video finishes and handle_video_finished is called)
             now = datetime.now().replace(tzinfo=None)
@@ -262,23 +262,23 @@ class EventScheduler(QObject):
                 if event.time > now:
                     next_event_index = i
                     break
-                    
+
             if next_event_index >= 0:
                 next_event = self.scheduled_events[next_event_index]
                 self.seconds_to_next = int((next_event.time - now).total_seconds())
             else:
                 # No more scheduled events
                 self.seconds_to_next = 0
-    
+
     def handle_video_finished(self):
         """
         Handle video playback completion - show countdown to next event
         """
         if self.current_event_index < 0 or self.current_event_index >= len(self.events):
             return
-            
+
         current_event = self.events[self.current_event_index]
-        
+
         # Find the next scheduled event
         now = datetime.now().replace(tzinfo=None)
         next_event_index = -1
@@ -286,7 +286,7 @@ class EventScheduler(QObject):
             if event.time > now:
                 next_event_index = i
                 break
-                
+
         if next_event_index >= 0:
             next_event = self.scheduled_events[next_event_index]
             seconds_to_next = int((next_event.time - now).total_seconds())
@@ -306,10 +306,14 @@ class EventScheduler(QObject):
                 current_event.title,
                 current_event.description,
             )
-                
-    def finish_triggered_event(self, next_title, seconds_to_next, current_title, current_description):
+
+    def finish_triggered_event(
+        self, next_title, seconds_to_next, current_title, current_description
+    ):
         """Helper method to show countdown after a triggered event finishes (deprecated)"""
-        self.event_finished.emit(next_title, seconds_to_next, current_title, current_description)
+        self.event_finished.emit(
+            next_title, seconds_to_next, current_title, current_description
+        )
         if seconds_to_next > 0:
             self.countdown_timer.start(1000)
 
@@ -322,24 +326,23 @@ class EventScheduler(QObject):
 
     def update_event(self, index, event_dict):
         if 0 <= index < len(self.events):
-            old_event = self.events[index]
             new_event = Event(
                 event_dict["time"],
                 event_dict["video_path"],
                 event_dict["title"],
                 event_dict["description"],
             )
-            
+
             # Update the event
             self.events[index] = new_event
-            
+
             # Update scheduled/unscheduled collections
             self.scheduled_events = [e for e in self.events if e.time is not None]
             self.unscheduled_events = [e for e in self.events if e.time is None]
-            
+
             # Sort scheduled events by time
             self.scheduled_events.sort(key=lambda x: x.time)
-            
+
             # Rebuild the events list with scheduled first, then unscheduled
             self.events = self.scheduled_events + self.unscheduled_events
 
@@ -348,7 +351,6 @@ class EventScheduler(QObject):
 
             # Update current event index if needed
             if self.current_event_index >= 0:
-                current_event = old_event
                 # Find the new index of the current event
                 try:
                     if new_event.time is None:
