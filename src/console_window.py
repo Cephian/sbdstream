@@ -294,10 +294,6 @@ class ConsoleWindow(QMainWindow):
 
         # Categorize events relative to now
         for i, event in enumerate(self.events_data):
-            # Skip the current event
-            if i == self.current_index:
-                continue
-
             # For events with timestamps
             if event["time"] is not None:
                 event_time = parser.parse(event["time"])
@@ -321,7 +317,11 @@ class ConsoleWindow(QMainWindow):
         for row_idx, _ in future_events:
             order_item = self.event_table.item(row_idx, 0)
             if order_item:
-                order_item.setText(str(next_order))
+                # If this is the current event, show both its current (0) and future number
+                if row_idx == self.current_index:
+                    order_item.setText(f"0, {next_order}")
+                else:
+                    order_item.setText(str(next_order))
                 next_order += 1
 
     def update_events(self, events):
