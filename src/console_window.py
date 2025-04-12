@@ -246,6 +246,18 @@ class ConsoleWindow(QMainWindow):
         # Set flag to prevent cellChanged from triggering during updates
         self.is_highlighting = True
         
+        # Update highlighting
+        self._update_highlighting()
+        
+        # Update order numbers if we have a current event
+        if self.current_index >= 0:
+            self._update_order_numbers()
+            
+        # Reset highlighting flag
+        self.is_highlighting = False
+
+    def _update_highlighting(self):
+        """Update the visual highlighting of the current event in the table."""
         # Reset all row colors
         for i in range(self.event_table.rowCount()):
             for j in range(1, self.event_table.columnCount()):  # Skip Order column (0)
@@ -259,12 +271,9 @@ class ConsoleWindow(QMainWindow):
                 item = self.event_table.item(self.current_index, j)
                 if item:
                     item.setBackground(QBrush(QColor(100, 100, 255, 100)))
-                    
-        # Update order column - skip if no current event
-        if self.current_index < 0:
-            self.is_highlighting = False
-            return
-            
+
+    def _update_order_numbers(self):
+        """Update the order numbers in the first column of the table."""
         # First, clear all order numbers
         for i in range(self.event_table.rowCount()):
             order_item = self.event_table.item(i, 0)
@@ -321,9 +330,6 @@ class ConsoleWindow(QMainWindow):
             if order_item:
                 order_item.setText(str(next_order))
                 next_order += 1
-                
-        # Reset highlighting flag
-        self.is_highlighting = False
 
     def update_events(self, events):
         self.is_updating = True
