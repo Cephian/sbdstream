@@ -119,6 +119,11 @@ class EventScheduler(QObject):
     current_event_signal = Signal(int)  # index of current event in self.events
     """Emitted when the currently active event changes."""
 
+    # --- Request signals (for ConsoleWindow to connect to) ---
+    request_add_event = Signal(dict) # event_data dictionary
+    request_remove_event = Signal(int) # index to remove
+    request_update_event_field = Signal(int, int, str) # index, column, value
+
     def __init__(self):
         """Initializes the EventScheduler."""
         super().__init__()
@@ -134,6 +139,11 @@ class EventScheduler(QObject):
         self.countdown_timer.timeout.connect(self._tick_countdown)
         self.seconds_to_next: int = 0
         self.csv_path: str | None = None
+
+        # Connect internal request signals to handlers
+        self.request_add_event.connect(self.add_event_data)
+        self.request_remove_event.connect(self.remove_event_at_index)
+        self.request_update_event_field.connect(self.update_event_field)
 
     def load_events_from_csv(self, csv_path: str):
         """
@@ -179,7 +189,7 @@ class EventScheduler(QObject):
         self.events = self.scheduled_events + self.unscheduled_events
 
         # Signal the UI about the updated list
-        self.all_events_signal.emit(self.events)
+        self._emit_update_signals()
         print(f"Loaded {len(self.events)} events ({len(self.scheduled_events)} scheduled).")
 
 
@@ -221,11 +231,13 @@ class EventScheduler(QObject):
                  print("Error: Could not find last past event in the main list.", file=sys.stderr)
                  self.current_event_index = -1
                  self._active_event_object = None
+                 self.current_event_signal.emit(self.current_event_index) # Emit update even on error
         else:
             print("No past scheduled events found.")
             # If no past event, the initial "current" state is effectively before the first event.
             self.current_event_index = -1
             self._active_event_object = None
+            self.current_event_signal.emit(self.current_event_index) # Emit update
 
 
         # Setup countdown to the *next* scheduled event and start checking timer
@@ -291,8 +303,8 @@ class EventScheduler(QObject):
                 triggered_event.title,
                 triggered_event.description,
             )
-            # Emit signal *after* index is updated
-            self.current_event_signal.emit(self.current_event_index)
+            # Emit signal *after* index is updated and active event set
+            self._emit_update_signals()
         else:
             print(f"Error: Invalid event index {event_index} triggered.", file=sys.stderr)
 
@@ -387,33 +399,21 @@ class EventScheduler(QObject):
         if self.seconds_to_next > 0:
             self.seconds_to_next -= 1
             self.update_countdown.emit(self.seconds_to_next)
-            if self.seconds_to_next == 0:
-                 # Optional: Stop timer slightly early if precision isn't critical
-                 # and _check_schedule handles the final trigger reliably.
-                 # self.countdown_timer.stop()
-                 pass # Let _check_schedule handle the exact moment
-        else:
-            # Should ideally be stopped by _check_schedule or _update_state_after_event
-            if self.countdown_timer.isActive():
-                self.countdown_timer.stop()
+            # No need to stop timer here, _check_schedule handles the transition
+        # We don't need an else block to stop the timer,
+        # as _update_state_after_event or _check_schedule should handle stopping it
+        # when a new event starts or the schedule ends.
 
 
     def update_event(self, index: int, new_event: Event):
         """
-        Updates an event at a specific index in the main `events` list.
-
-        Reloads the event data, re-sorts scheduled events, rebuilds the
-        main list, updates the UI, potentially adjusts the current event index,
-        and saves the changes back to the CSV.
-
-        Args:
-            index: The index of the event to update in the `self.events` list.
-            new_event: The new Event object to replace the existing one.
+        DEPRECATED: Use update_event_data instead for changes originating from UI.
+        Internal method to replace an event object directly.
+        Assumes the caller handles saving and state updates. Use with caution.
         """
         if 0 <= index < len(self.events):
             original_event = self.events[index]
-            
-            print(f"Updating event at index {index}: '{original_event.title}' -> '{new_event.title}'")
+            print(f"Internal update for event at index {index}: '{original_event.title}' -> '{new_event.title}'")
 
             # --- Update internal lists ---
             # 1. Remove original event from its specific list (scheduled/unscheduled)
@@ -435,43 +435,235 @@ class EventScheduler(QObject):
             # 3. Rebuild the main events list
             self.events = self.scheduled_events + self.unscheduled_events
 
-            # --- Update State and UI ---
-            # 4. Signal the UI about the updated full list
-            self.all_events_signal.emit(self.events)
+            # Caller is responsible for emitting signals, saving, etc.
+        else:
+             print(f"Error: Invalid index {index} for internal update_event.", file=sys.stderr)
 
-            # 5. Update current_event_index if the *active* event was the one modified
-            #    or if the list reordering affected its index.
-            new_active_event_index = -1
-            if self._active_event_object:
-                try:
-                    # Find the potentially new index of the active event object
-                    new_active_event_index = self.events.index(self._active_event_object)
-                except ValueError:
-                     # The active event object is no longer in the list (e.g., deleted?)
-                     # This case shouldn't happen with 'update', but handle defensively.
-                     print(f"Warning: Active event '{self._active_event_object.title}' not found after update.", file=sys.stderr)
-                     self._active_event_object = None # Reset active event
-                     self.current_event_index = -1 # Reset index
-                     # Need to re-evaluate the schedule state
-                     self._update_state_after_event() # Reset countdown etc.
+    # --- New Methods for Handling UI Requests ---
 
-            if new_active_event_index != self.current_event_index:
-                if new_active_event_index != -1:
-                     print(f"Current event index shifted to {new_active_event_index} due to update.")
-                self.current_event_index = new_active_event_index
-                self.current_event_signal.emit(self.current_event_index) # Signal only if changed
+    def add_event_data(self, event_data: dict):
+        """
+        Adds a new event based on data dictionary, updates lists, saves, and emits signals.
 
-            # Always update the countdown if a scheduled event's time was changed
-            if new_event.time is not None or original_event.time is not None:
-                self._update_state_after_event()
+        Args:
+            event_data: Dictionary with keys 'time', 'video_path', 'title', 'description'.
+                        'time' should be an ISO string or None.
+        """
+        print(f"Adding new event: {event_data.get('title', 'Untitled')}")
+        new_event = Event(
+            event_data.get("time"),
+            event_data.get("video_path", ""),
+            event_data.get("title", "Untitled Event"),
+            event_data.get("description", ""),
+        )
 
-            # --- Persist Changes ---
-            # 6. Save changes to CSV
+        # Add to the correct specific list
+        if new_event.time:
+            self.scheduled_events.append(new_event)
+            self.scheduled_events.sort(key=lambda x: x.time)
+        else:
+            self.unscheduled_events.append(new_event)
+
+        # Rebuild main list
+        self.events = self.scheduled_events + self.unscheduled_events
+
+        # Save changes
+        self.save_to_csv()
+
+        # Recalculate current state and emit updates
+        self._recalculate_current_index() # Ensure index reflects potential shifts
+        self._update_state_after_event()  # Update countdown based on potential new schedule
+        self._emit_update_signals()       # Notify UI
+
+
+    def remove_event_at_index(self, index: int):
+        """
+        Removes the event at the specified index, updates lists, saves, and emits signals.
+
+        Args:
+            index: The index of the event to remove in the `self.events` list.
+        """
+        if 0 <= index < len(self.events):
+            event_to_remove = self.events[index]
+            print(f"Removing event at index {index}: '{event_to_remove.title}'")
+
+            was_active_event = (self._active_event_object is event_to_remove)
+
+            # Remove from the specific list
+            if event_to_remove.time:
+                if event_to_remove in self.scheduled_events:
+                    self.scheduled_events.remove(event_to_remove)
+                # No need to re-sort scheduled list after removal
+            else:
+                if event_to_remove in self.unscheduled_events:
+                    self.unscheduled_events.remove(event_to_remove)
+
+            # Rebuild main list
+            self.events = self.scheduled_events + self.unscheduled_events
+
+            # Save changes
             self.save_to_csv()
 
-        else:
-             print(f"Error: Invalid index {index} for update_event.", file=sys.stderr)
+            # Update state *after* list modification
+            if was_active_event:
+                self._active_event_object = None # Clear active event if it was removed
+                self.current_event_index = -1   # Reset index
+                self._recalculate_current_index() # Try to find the logical new current index
+            else:
+                # If the removed event wasn't active, the active event *might* still
+                # exist, but its index could have shifted.
+                self._recalculate_current_index()
 
+            self._update_state_after_event()  # Recalculate countdown etc.
+            self._emit_update_signals()       # Notify UI
+
+        else:
+            print(f"Error: Invalid index {index} for remove_event_at_index.", file=sys.stderr)
+
+
+    def update_event_field(self, index: int, column: int, value: str):
+        """
+        Updates a specific field of an event based on console column index,
+        saves, and emits signals.
+
+        Args:
+            index: The index of the event in `self.events`.
+            column: The column index from the ConsoleWindow table (1-5).
+            value: The new string value for the field.
+        """
+        if not (0 <= index < len(self.events)):
+            print(f"Error: Invalid index {index} for update_event_field.", file=sys.stderr)
+            return
+
+        event_to_update = self.events[index]
+        original_time = event_to_update.time # Store original time for comparison
+        print(f"Updating field (col {column}) for event at index {index}: '{event_to_update.title}'")
+
+        try:
+            if column == 1:  # Date column
+                if value.lower() == "unscheduled" or value == "":
+                    event_to_update.set_time(None)
+                elif event_to_update.time is None:
+                    now = datetime.now()
+                    event_to_update.set_time(f"{value}T{now.strftime('%H:%M:%S')}")
+                else:
+                    time_part = event_to_update.time.strftime("%H:%M:%S")
+                    event_to_update.set_time(f"{value}T{time_part}")
+            elif column == 2:  # Time column
+                if value.lower() == "unscheduled" or value == "":
+                    event_to_update.set_time(None)
+                elif event_to_update.time is None:
+                    now = datetime.now()
+                    event_to_update.set_time(f"{now.strftime('%Y-%m-%d')}T{value}")
+                else:
+                    date_part = event_to_update.time.strftime("%Y-%m-%d")
+                    event_to_update.set_time(f"{date_part}T{value}")
+            elif column == 3: # Video Path
+                event_to_update.video_path = value
+            elif column == 4: # Title
+                event_to_update.title = value
+            elif column == 5: # Description
+                event_to_update.description = value
+            else:
+                print(f"Warning: Invalid column index {column} for update_event_field.", file=sys.stderr)
+                return # Don't proceed if column is invalid
+        except Exception as e:
+            print(f"Error updating event field (Index: {index}, Column: {column}, Value: '{value}'): {e}", file=sys.stderr)
+            # Optionally revert or signal an error? For now, just log and don't save.
+            return
+
+        # Check if the event's schedule status changed (scheduled <-> unscheduled) or time changed
+        time_changed = (original_time != event_to_update.time)
+        schedule_status_changed = (original_time is None) != (event_to_update.time is None)
+
+        if schedule_status_changed or time_changed:
+            # Need to potentially move event between lists and rebuild
+            # 1. Remove from original specific list
+            if original_time:
+                if event_to_update in self.scheduled_events:
+                     # It might have been removed already if time changed and it was re-added below
+                     # Check existence before removal
+                    self.scheduled_events.remove(event_to_update)
+            else:
+                 if event_to_update in self.unscheduled_events:
+                    self.unscheduled_events.remove(event_to_update)
+
+            # 2. Add to the correct new specific list
+            if event_to_update.time:
+                self.scheduled_events.append(event_to_update)
+                self.scheduled_events.sort(key=lambda x: x.time)
+            else:
+                self.unscheduled_events.append(event_to_update)
+
+            # 3. Rebuild main list
+            self.events = self.scheduled_events + self.unscheduled_events
+
+        # Save changes regardless of whether time changed (e.g., title update)
+        self.save_to_csv()
+
+        # Recalculate current index as list order might have changed
+        self._recalculate_current_index()
+
+        # Update countdown state if timing potentially changed
+        if time_changed or schedule_status_changed:
+            self._update_state_after_event()
+
+        # Emit signals to update UI
+        # self._emit_update_signals() # Don't emit directly
+        # Schedule the UI update signals slightly later to avoid conflicts with table editor commits
+        QTimer.singleShot(0, self._emit_update_signals)
+
+    def _recalculate_current_index(self):
+        """
+        Finds the new index of the _active_event_object in the potentially modified self.events list.
+        If _active_event_object is None or no longer exists, attempts to find the most recent past event.
+        Updates self.current_event_index.
+        """
+        if self._active_event_object:
+            try:
+                self.current_event_index = self.events.index(self._active_event_object)
+            except ValueError:
+                # The active event is no longer in the list (removed or changed significantly?)
+                print(f"Warning: Active event '{self._active_event_object.title}' not found after update/removal.", file=sys.stderr)
+                self._active_event_object = None
+                self.current_event_index = -1
+        else:
+            # No active event, reset index
+             self.current_event_index = -1
+
+        # If index is still -1 (either active event removed or none was active),
+        # try to find the most recent past event again based on the current time
+        # This covers cases where adding/removing events changes what *should* be considered current
+        if self.current_event_index == -1:
+            now = datetime.now().replace(tzinfo=None)
+            most_recent_past_scheduled_event: Event | None = None
+            most_recent_past_scheduled_event_index_in_all: int = -1
+
+            for event in self.scheduled_events: # Iterate through the potentially updated sorted list
+                if event.time <= now:
+                    most_recent_past_scheduled_event = event
+                else:
+                    break # Stop early
+
+            if most_recent_past_scheduled_event:
+                try:
+                    most_recent_past_scheduled_event_index_in_all = self.events.index(most_recent_past_scheduled_event)
+                    self.current_event_index = most_recent_past_scheduled_event_index_in_all
+                    # Should we reset _active_event_object here?
+                    # Let's assume _check_schedule or trigger_event will set the active object appropriately.
+                    # Setting it here might prematurely mark an event as active.
+                    print(f"Recalculated current index to {self.current_event_index} (event: {most_recent_past_scheduled_event.title})")
+                except ValueError:
+                    print(f"Error: Could not find recalculated past event in main list.", file=sys.stderr)
+                    self.current_event_index = -1 # Stay at -1 if error
+
+
+    def _emit_update_signals(self):
+        """Emits signals to notify UI about the current state."""
+        self.all_events_signal.emit(self.events)
+        self.current_event_signal.emit(self.current_event_index)
+
+    # --- Persistence ---
 
     def save_to_csv(self):
         """Saves the current state of all events back to the loaded CSV file."""

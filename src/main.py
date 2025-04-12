@@ -33,16 +33,26 @@ def main():
     scheduler = EventScheduler()
 
     # Connect signals
+    # Scheduler -> VisualWindow
     scheduler.event_started.connect(visual_window.play_video)
     scheduler.event_finished.connect(visual_window.show_countdown)
     scheduler.update_countdown.connect(visual_window.update_countdown)
-    scheduler.all_events_signal.connect(console_window.update_events)
-    scheduler.current_event_signal.connect(console_window.update_display_state)
-    console_window.event_edited.connect(scheduler.update_event)
+
+    # Scheduler -> ConsoleWindow (Display Updates)
+    scheduler.all_events_signal.connect(console_window.update_events_display)
+    scheduler.current_event_signal.connect(console_window.update_current_event)
+
+    # ConsoleWindow -> Scheduler (Requests & Triggers)
+    # console_window.event_edited.connect(scheduler.update_event) # Removed - handled by requests
+    console_window.request_add_event.connect(scheduler.add_event_data)
+    console_window.request_remove_event.connect(scheduler.remove_event_at_index)
+    console_window.request_update_event_field.connect(scheduler.update_event_field)
     console_window.event_triggered.connect(scheduler.trigger_event)
+
+    # VisualWindow -> Scheduler
     visual_window.video_finished.connect(scheduler.handle_video_finished)
     
-    # Connect the text_updated signal to update visual window text
+    # ConsoleWindow -> VisualWindow (Text Updates)
     console_window.text_updated.connect(visual_window.update_text)
 
     print(f"Using CSV file: {csv_path}")
@@ -63,29 +73,28 @@ def main():
     console_window.show()
 
     # Initialize the countdown with first event if available
-    now = datetime.now()
-
+    # No longer needed - scheduler.start() handles finding the current state
+    # and emitting signals which will update the console and visual windows.
+    # now = datetime.now()
     # Find the most recent past event and next upcoming event
-    most_recent_past_event = None
-
-    for i, event in enumerate(scheduler.events):
-        if event.time <= now:
-            # This event has already passed - always update to get the most recent one
-            most_recent_past_event = event
-        elif event.time > now:
-            break
-
-    if most_recent_past_event:
-        # Also update the scheduler's current event index
-        for i, event in enumerate(scheduler.events):
-            if event.time == most_recent_past_event.time:
-                scheduler.current_event_index = i
-                scheduler.current_event_signal.emit(i)
-                break
+    # most_recent_past_event = None
+    # for i, event in enumerate(scheduler.events):
+    #     if event.time <= now:
+    #         # This event has already passed - always update to get the most recent one
+    #         most_recent_past_event = event
+    #     elif event.time > now:
+    #         break
+    # if most_recent_past_event:
+    #     # Also update the scheduler's current event index
+    #     for i, event in enumerate(scheduler.events):
+    #         if event.time == most_recent_past_event.time:
+    #             scheduler.current_event_index = i
+    #             scheduler.current_event_signal.emit(i)
+    #             break
 
     # visual_window.show_countdown(next_title, seconds_to_next, current_title, current_description)
 
-    # Start the scheduler
+    # Start the scheduler (this will now emit initial state signals)
     scheduler.start()
 
     return app.exec()
