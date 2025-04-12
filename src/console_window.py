@@ -155,6 +155,7 @@ class AddEventDialog(QDialog):
 class ConsoleWindow(QMainWindow):
     event_edited = Signal(int, object)  # index, Event object
     event_triggered = Signal(int)  # index of event to trigger
+    text_updated = Signal(str, str)  # title, description - for updating livestream text
 
     def __init__(self):
         super().__init__()
@@ -457,6 +458,10 @@ class ConsoleWindow(QMainWindow):
 
         # Emit signal to update the event
         self.event_edited.emit(row, new_event)
+        
+        # If title or description was changed, emit text_updated signal
+        if column == 4 or column == 5:
+            self.text_updated.emit(new_event.title, new_event.description)
 
     def save_to_csv(self):
         if self.csv_path:
@@ -558,6 +563,10 @@ class ConsoleWindow(QMainWindow):
 
             # Emit signal for scheduler
             self.event_edited.emit(index, new_event)
+            
+            # If this is now the current event, emit text updated signal
+            if index == self.current_index:
+                self.text_updated.emit(new_event.title, new_event.description)
 
     def remove_event(self):
         # Get selected row
@@ -627,10 +636,16 @@ class ConsoleWindow(QMainWindow):
         if confirm == QMessageBox.Yes:
             # Set the current index to the selected row before emitting the signal
             self.current_index = selected_row
+            
+            # Get the event data for text update
+            selected_event = self.events_data[selected_row]
 
             # Update the highlight and order column to reflect the new current event
             self.update_display_state()
 
+            # Emit text updated signal
+            self.text_updated.emit(selected_event.title, selected_event.description)
+            
             # Emit the signal to trigger the event
             self.event_triggered.emit(selected_row)
 

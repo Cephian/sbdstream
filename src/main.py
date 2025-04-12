@@ -41,6 +41,9 @@ def main():
     console_window.event_edited.connect(scheduler.update_event)
     console_window.event_triggered.connect(scheduler.trigger_event)
     visual_window.video_finished.connect(scheduler.handle_video_finished)
+    
+    # Connect the text_updated signal to update visual window text
+    console_window.text_updated.connect(visual_window.update_text)
 
     print(f"Using CSV file: {csv_path}")
 

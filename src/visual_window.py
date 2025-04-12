@@ -179,6 +179,17 @@ class VisualWindow(QMainWindow):
         minutes, seconds = divmod(remainder, 60)
         self.countdown_label.setText(f"{hours:02}:{minutes:02}:{seconds:02}")
 
+    def update_text(self, title, description):
+        """
+        Updates just the title and description text without affecting other UI elements.
+        """
+        if title:
+            self.current_title = title
+            self.title_label.setText(title)
+        if description:
+            self.current_description = description
+            self.description_label.setText(description)
+
     def handle_playback_state_change(self, state):
         """Handle changes in the media player's playback state"""
         # QMediaPlayer.StoppedState is 0
