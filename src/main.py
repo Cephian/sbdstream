@@ -39,6 +39,8 @@ def main():
     scheduler.all_events_signal.connect(console_window.update_events)
     scheduler.current_event_signal.connect(console_window.highlight_current_event)
     console_window.event_edited.connect(scheduler.update_event)
+    console_window.event_triggered.connect(scheduler.trigger_event)
+    visual_window.video_finished.connect(scheduler.handle_video_finished)
 
     print(f"Using CSV file: {csv_path}")
 

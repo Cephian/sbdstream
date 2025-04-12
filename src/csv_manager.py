@@ -25,8 +25,13 @@ class CSVManager:
 
             # Write events
             for event in events:
-                # Parse the ISO format datetime to separate date and time
-                if "time" in event and event["time"]:
+                # Check for unscheduled events
+                if "time" not in event or event["time"] is None:
+                    # This is an unscheduled event
+                    date_str = ""
+                    time_str = ""
+                else:
+                    # Parse the ISO format datetime to separate date and time
                     try:
                         dt = datetime.fromisoformat(event["time"])
                         date_str = dt.strftime("%Y-%m-%d")
@@ -35,9 +40,6 @@ class CSVManager:
                         # Fallback if the time is not in ISO format
                         date_str = ""
                         time_str = event["time"]
-                else:
-                    date_str = ""
-                    time_str = ""
 
                 writer.writerow(
                     [
@@ -69,10 +71,6 @@ class CSVManager:
         with open(csv_path, "r") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                # Validate time field is present
-                if "Time" not in row or not row["Time"].strip():
-                    raise ValueError("Time field is required in CSV file")
-
                 # Validate title field is present
                 if "Title" not in row or not row["Title"].strip():
                     raise ValueError("Title field is required in CSV file")
@@ -80,6 +78,20 @@ class CSVManager:
                 # Validate description field is present
                 if "Description" not in row or not row["Description"].strip():
                     raise ValueError("Description field is required in CSV file")
+
+                # Check if this is an unscheduled event (no time)
+                is_unscheduled = "Time" not in row or not row["Time"].strip()
+                
+                if is_unscheduled:
+                    # This is an unscheduled event, set time to None
+                    event = {
+                        "time": None,
+                        "video_path": row.get("Video", ""),
+                        "title": row["Title"].strip(),
+                        "description": row["Description"].strip(),
+                    }
+                    events.append(event)
+                    continue
 
                 time_str = row["Time"].strip()
 

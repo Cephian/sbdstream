@@ -1,11 +1,14 @@
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel, QSizePolicy
-from PySide6.QtCore import Qt, QUrl, QCoreApplication
+from PySide6.QtCore import Qt, QUrl, QCoreApplication, Signal
 from PySide6.QtGui import QFont, QColor, QPalette
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
 
 
 class VisualWindow(QMainWindow):
+    # Signal emitted when video playback ends
+    video_finished = Signal()
+    
     def __init__(self):
         super().__init__()
 
@@ -28,6 +31,9 @@ class VisualWindow(QMainWindow):
         # Create media player
         self.media_player = QMediaPlayer()
         self.media_player.setVideoOutput(self.video_widget)
+        
+        # Connect the media player's playback state change to our handler
+        self.media_player.playbackStateChanged.connect(self.handle_playback_state_change)
 
         # Create countdown widget
         self.countdown_widget = QWidget()
@@ -172,6 +178,13 @@ class VisualWindow(QMainWindow):
         hours, remainder = divmod(seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
         self.countdown_label.setText(f"{hours:02}:{minutes:02}:{seconds:02}")
+
+    def handle_playback_state_change(self, state):
+        """Handle changes in the media player's playback state"""
+        # QMediaPlayer.StoppedState is 0
+        if state == QMediaPlayer.StoppedState:
+            # Video has finished playing, emit our signal
+            self.video_finished.emit()
 
     def closeEvent(self, event):
         # Quit the application when this window is closed
