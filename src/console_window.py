@@ -233,26 +233,26 @@ class ConsoleWindow(QMainWindow):
 
     def update_display_state(self, index=None):
         """
-        Update the visual state of the event table by highlighting the current event 
+        Update the visual state of the event table by highlighting the current event
         and updating the order column numbers.
-        
+
         Args:
             index: Optional index of the event to set as current. If None, uses the existing current_index.
         """
         # Update current index if provided
         if index is not None:
             self.current_index = index
-            
+
         # Set flag to prevent cellChanged from triggering during updates
         self.is_highlighting = True
-        
+
         # Update highlighting
         self._update_highlighting()
-        
+
         # Update order numbers if we have a current event
         if self.current_index >= 0:
             self._update_order_numbers()
-            
+
         # Reset highlighting flag
         self.is_highlighting = False
 
@@ -264,7 +264,7 @@ class ConsoleWindow(QMainWindow):
                 item = self.event_table.item(i, j)
                 if item:
                     item.setBackground(QBrush())
-                    
+
         # Highlight the current event
         if self.current_index >= 0 and self.current_index < self.event_table.rowCount():
             for j in range(1, self.event_table.columnCount()):  # Skip Order column (0)
@@ -279,29 +279,29 @@ class ConsoleWindow(QMainWindow):
             order_item = self.event_table.item(i, 0)
             if order_item:
                 order_item.setText("")
-                
+
         # Get current time for comparison
         now = datetime.now()
-        
+
         # Set "0" for current event regardless of its original timing
         current_order_item = self.event_table.item(self.current_index, 0)
         if current_order_item:
             current_order_item.setText("0")
-            
+
         # Lists for future events and unscheduled events
         future_events = []
         unscheduled_events = []
-        
+
         # Categorize events relative to now
         for i, event in enumerate(self.events_data):
             # Skip the current event
             if i == self.current_index:
                 continue
-                
+
             # For events with timestamps
             if event["time"] is not None:
                 event_time = parser.parse(event["time"])
-                
+
                 # If the event is in the future (compared to current time)
                 if event_time > now:
                     future_events.append((i, event_time))
@@ -310,22 +310,15 @@ class ConsoleWindow(QMainWindow):
             else:
                 # Unscheduled events will be numbered after scheduled future events
                 unscheduled_events.append(i)
-                
+
         # Sort future events by time
         future_events.sort(key=lambda x: x[1])
-        
+
         # Assign order numbers to future events
         next_order = 1
-        
-        # Number the scheduled future events first
+
+        # Number the scheduled future events
         for row_idx, _ in future_events:
-            order_item = self.event_table.item(row_idx, 0)
-            if order_item:
-                order_item.setText(str(next_order))
-                next_order += 1
-                
-        # Then number any unscheduled events (other than the current one)
-        for row_idx in unscheduled_events:
             order_item = self.event_table.item(row_idx, 0)
             if order_item:
                 order_item.setText(str(next_order))
