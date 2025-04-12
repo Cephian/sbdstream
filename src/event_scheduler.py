@@ -405,40 +405,6 @@ class EventScheduler(QObject):
         # when a new event starts or the schedule ends.
 
 
-    def update_event(self, index: int, new_event: Event):
-        """
-        DEPRECATED: Use update_event_data instead for changes originating from UI.
-        Internal method to replace an event object directly.
-        Assumes the caller handles saving and state updates. Use with caution.
-        """
-        if 0 <= index < len(self.events):
-            original_event = self.events[index]
-            print(f"Internal update for event at index {index}: '{original_event.title}' -> '{new_event.title}'")
-
-            # --- Update internal lists ---
-            # 1. Remove original event from its specific list (scheduled/unscheduled)
-            if original_event.time:
-                if original_event in self.scheduled_events:
-                    self.scheduled_events.remove(original_event)
-            else:
-                if original_event in self.unscheduled_events:
-                    self.unscheduled_events.remove(original_event)
-
-            # 2. Add the new event to the correct specific list
-            if new_event.time:
-                self.scheduled_events.append(new_event)
-                # Re-sort scheduled events as time might have changed
-                self.scheduled_events.sort(key=lambda x: x.time)
-            else:
-                self.unscheduled_events.append(new_event)
-
-            # 3. Rebuild the main events list
-            self.events = self.scheduled_events + self.unscheduled_events
-
-            # Caller is responsible for emitting signals, saving, etc.
-        else:
-             print(f"Error: Invalid index {index} for internal update_event.", file=sys.stderr)
-
     # --- New Methods for Handling UI Requests ---
 
     def add_event_data(self, event_data: dict):
