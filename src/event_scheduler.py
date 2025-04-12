@@ -21,29 +21,44 @@ class Event:
             title: Title of the event.
             description: Description of the event.
         """
-        self.time: datetime | None = None
+        self._time: datetime | None = None
         if time_str:
             try:
                 dt = parser.parse(time_str, fuzzy=False)
                 # Ensure naive datetime (no timezone info) for consistent comparison
-                self.time = dt.replace(tzinfo=None)
+                self._time = dt.replace(tzinfo=None)
             except (ValueError, TypeError) as e:
                 print(f"Error parsing date '{time_str}': {e}. Treating as unscheduled.", file=sys.stderr)
-                # Keep self.time as None if parsing fails
+                # Keep self._time as None if parsing fails
 
-        self.video_path = video_path
-        self.title = title
-        self.description = description
+        self._video_path = video_path
+        self._title = title
+        self._description = description
 
-    def to_dict(self) -> dict:
-        """Converts the Event object to a dictionary."""
-        time_str = self.time.isoformat() if self.time else None
-        return {
-            "time": time_str,
-            "video_path": self.video_path,
-            "title": self.title,
-            "description": self.description,
-        }
+    @property
+    def time(self) -> datetime | None:
+        """Get the datetime of the event, or None if unscheduled."""
+        return self._time
+    
+    @property
+    def time_iso(self) -> str | None:
+        """Get the ISO-formatted time string, or None if unscheduled."""
+        return self._time.isoformat() if self._time else None
+    
+    @property
+    def video_path(self) -> str:
+        """Get the path to the video file."""
+        return self._video_path
+    
+    @property
+    def title(self) -> str:
+        """Get the title of the event."""
+        return self._title
+    
+    @property
+    def description(self) -> str:
+        """Get the description of the event."""
+        return self._description
 
 
 class EventScheduler(QObject):
@@ -68,7 +83,7 @@ class EventScheduler(QObject):
     update_countdown = Signal(int)  # seconds_remaining
     """Emitted every second while counting down to the next event."""
 
-    all_events_signal = Signal(list)  # list of event dicts
+    all_events_signal = Signal(list)  # list of Event objects
     """Emitted when the event list is loaded or modified."""
 
     current_event_signal = Signal(int)  # index of current event in self.events
@@ -134,7 +149,7 @@ class EventScheduler(QObject):
         self.events = self.scheduled_events + self.unscheduled_events
 
         # Signal the UI about the updated list
-        self.all_events_signal.emit([event.to_dict() for event in self.events])
+        self.all_events_signal.emit(self.events)
         print(f"Loaded {len(self.events)} events ({len(self.scheduled_events)} scheduled).")
 
 
@@ -353,7 +368,7 @@ class EventScheduler(QObject):
                 self.countdown_timer.stop()
 
 
-    def update_event(self, index: int, event_dict: dict):
+    def update_event(self, index: int, new_event: Event):
         """
         Updates an event at a specific index in the main `events` list.
 
@@ -363,17 +378,11 @@ class EventScheduler(QObject):
 
         Args:
             index: The index of the event to update in the `self.events` list.
-            event_dict: A dictionary containing the new event data.
+            new_event: The new Event object to replace the existing one.
         """
         if 0 <= index < len(self.events):
             original_event = self.events[index]
-            new_event = Event(
-                event_dict.get("time"),
-                event_dict.get("video_path", ""),
-                event_dict.get("title", "Untitled Event"),
-                event_dict.get("description", ""),
-            )
-
+            
             print(f"Updating event at index {index}: '{original_event.title}' -> '{new_event.title}'")
 
             # --- Update internal lists ---
@@ -398,7 +407,7 @@ class EventScheduler(QObject):
 
             # --- Update State and UI ---
             # 4. Signal the UI about the updated full list
-            self.all_events_signal.emit([event.to_dict() for event in self.events])
+            self.all_events_signal.emit(self.events)
 
             # 5. Update current_event_index if the *active* event was the one modified
             #    or if the list reordering affected its index.
@@ -434,10 +443,19 @@ class EventScheduler(QObject):
         """Saves the current state of all events back to the loaded CSV file."""
         if self.csv_path:
             try:
-                events_dict = [event.to_dict() for event in self.events]
+                events_dict = [self._event_to_dict(event) for event in self.events]
                 CSVManager.save_events(self.csv_path, events_dict)
                 print(f"Events saved to {self.csv_path}")
             except Exception as e:
                 print(f"Error saving events to {self.csv_path}: {e}", file=sys.stderr)
         else:
             print("Error: Cannot save events, CSV path not set.", file=sys.stderr)
+    
+    def _event_to_dict(self, event: Event) -> dict:
+        """Convert an Event object to a dictionary for CSV saving."""
+        return {
+            "time": event.time_iso,
+            "video_path": event.video_path,
+            "title": event.title,
+            "description": event.description,
+        }

@@ -23,6 +23,7 @@ from dateutil import parser
 from datetime import datetime
 
 from src.csv_manager import CSVManager
+from src.event_scheduler import Event
 
 
 class EventTableWidget(QTableWidget):
@@ -152,7 +153,7 @@ class AddEventDialog(QDialog):
 
 
 class ConsoleWindow(QMainWindow):
-    event_edited = Signal(int, dict)  # index, event_dict
+    event_edited = Signal(int, object)  # index, Event object
     event_triggered = Signal(int)  # index of event to trigger
 
     def __init__(self):
@@ -295,8 +296,8 @@ class ConsoleWindow(QMainWindow):
         # Categorize events relative to now
         for i, event in enumerate(self.events_data):
             # For events with timestamps
-            if event["time"] is not None:
-                event_time = parser.parse(event["time"])
+            if event.time is not None:
+                event_time = parser.parse(event.time)
 
                 # If the event is in the future (compared to current time)
                 if event_time > now:
@@ -336,13 +337,12 @@ class ConsoleWindow(QMainWindow):
             self.event_table.insertRow(i)
 
             # Format time (handle None for unscheduled events)
-            if event["time"] is None:
+            if event.time is None:
                 formatted_date = "Unscheduled"
                 formatted_time = "Unscheduled"
             else:
                 # Format time
-                time_str = event["time"]
-                dt = parser.parse(time_str)
+                dt = event.time
                 formatted_date = dt.strftime("%Y-%m-%d")
                 formatted_time = dt.strftime("%H:%M:%S")
 
@@ -359,15 +359,15 @@ class ConsoleWindow(QMainWindow):
             time_item = QTableWidgetItem(formatted_time)
 
             # Style unscheduled events differently
-            if event["time"] is None:
+            if event.time is None:
                 date_item.setBackground(QBrush(QColor("#3A2A4A")))
                 time_item.setBackground(QBrush(QColor("#3A2A4A")))
 
             self.event_table.setItem(i, 1, date_item)
             self.event_table.setItem(i, 2, time_item)
-            self.event_table.setItem(i, 3, QTableWidgetItem(event["video_path"]))
-            self.event_table.setItem(i, 4, QTableWidgetItem(event["title"]))
-            self.event_table.setItem(i, 5, QTableWidgetItem(event["description"]))
+            self.event_table.setItem(i, 3, QTableWidgetItem(event.video_path))
+            self.event_table.setItem(i, 4, QTableWidgetItem(event.title))
+            self.event_table.setItem(i, 5, QTableWidgetItem(event.description))
 
         # Complete table updates before highlighting
         self.is_updating = False
@@ -393,68 +393,101 @@ class ConsoleWindow(QMainWindow):
 
         value = item.text()
 
-        # Get current event data
-        event = self.events_data[row].copy()
+        # Create event data dict to send to scheduler
+        current_event = self.events_data[row]
+        event_dict = {
+            "time": current_event.time_iso,
+            "video_path": current_event.video_path,
+            "title": current_event.title,
+            "description": current_event.description,
+        }
 
         # Update the appropriate field
         if column == 1:  # Date column
             if value.lower() == "unscheduled":
                 # Convert to an unscheduled event
-                event["time"] = None
-            elif event["time"] is None:
+                event_dict["time"] = None
+            elif event_dict["time"] is None:
                 # Converting from unscheduled to scheduled - use current date and default time
                 now = datetime.now()
-                event["time"] = f"{value}T{now.strftime('%H:%M:%S')}"
+                event_dict["time"] = f"{value}T{now.strftime('%H:%M:%S')}"
             else:
                 # Parse existing time
-                dt = parser.parse(event["time"])
+                dt = parser.parse(event_dict["time"])
                 # Get the time part
                 time_part = dt.strftime("%H:%M:%S")
                 # Combine with new date
-                event["time"] = f"{value}T{time_part}"
+                event_dict["time"] = f"{value}T{time_part}"
         elif column == 2:  # Time column
             if value.lower() == "unscheduled":
                 # Convert to an unscheduled event
-                event["time"] = None
-            elif event["time"] is None:
+                event_dict["time"] = None
+            elif event_dict["time"] is None:
                 # Converting from unscheduled to scheduled - use current date and new time
                 now = datetime.now()
-                event["time"] = f"{now.strftime('%Y-%m-%d')}T{value}"
+                event_dict["time"] = f"{now.strftime('%Y-%m-%d')}T{value}"
             else:
                 # Parse existing time
-                dt = parser.parse(event["time"])
+                dt = parser.parse(event_dict["time"])
                 # Get the date part
                 date_part = dt.strftime("%Y-%m-%d")
                 # Combine with new time
-                event["time"] = f"{date_part}T{value}"
+                event_dict["time"] = f"{date_part}T{value}"
         elif column == 3:
-            event["video_path"] = value
+            event_dict["video_path"] = value
         elif column == 4:
-            event["title"] = value
+            event_dict["title"] = value
         elif column == 5:
-            event["description"] = value
+            event_dict["description"] = value
+
+        # Create a new event object
+        new_event = Event(
+            event_dict["time"],
+            event_dict["video_path"],
+            event_dict["title"],
+            event_dict["description"]
+        )
 
         # Update events_data
-        self.events_data[row] = event
-
+        self.events_data[row] = new_event
+        
         # Save changes immediately
         self.save_to_csv()
-
+        
         # Update order column in case the event timing changed
         self.update_display_state()
 
         # Emit signal to update the event
-        self.event_edited.emit(row, event)
+        self.event_edited.emit(row, new_event)
 
     def save_to_csv(self):
         if self.csv_path:
-            CSVManager.save_events(self.csv_path, self.events_data)
+            # Convert Event objects to dictionaries for CSV manager
+            events_dict = []
+            for event in self.events_data:
+                events_dict.append({
+                    "time": event.time_iso,
+                    "video_path": event.video_path,
+                    "title": event.title,
+                    "description": event.description,
+                })
+            CSVManager.save_events(self.csv_path, events_dict)
 
     def save_changes(self):
         if not self.csv_path:
             return
 
-        success = CSVManager.save_events(self.csv_path, self.events_data)
+        # Convert Event objects to dictionaries for CSV manager
+        events_dict = []
+        for event in self.events_data:
+            events_dict.append({
+                "time": event.time_iso,
+                "video_path": event.video_path,
+                "title": event.title,
+                "description": event.description,
+            })
+            
+        success = CSVManager.save_events(self.csv_path, events_dict)
 
         if success:
             QMessageBox.information(
@@ -472,15 +505,23 @@ class ConsoleWindow(QMainWindow):
             # Get event data
             event_data = dialog.get_event_data()
 
+            # Create Event object
+            new_event = Event(
+                event_data["time"],
+                event_data["video_path"],
+                event_data["title"],
+                event_data["description"]
+            )
+
             # Add to events data
-            self.events_data.append(event_data)
+            self.events_data.append(new_event)
 
             # Sort and segregate events (scheduled vs unscheduled)
-            scheduled_events = [e for e in self.events_data if e["time"] is not None]
-            unscheduled_events = [e for e in self.events_data if e["time"] is None]
+            scheduled_events = [e for e in self.events_data if e.time is not None]
+            unscheduled_events = [e for e in self.events_data if e.time is None]
 
             # Sort scheduled events by time
-            scheduled_events.sort(key=lambda x: parser.parse(x["time"]))
+            scheduled_events.sort(key=lambda x: x.time)
 
             # Rebuild events list with scheduled first, then unscheduled
             self.events_data = scheduled_events + unscheduled_events
@@ -495,18 +536,21 @@ class ConsoleWindow(QMainWindow):
             self.update_display_state()
 
             # Find the new index of the added event
+            index = -1
             for i, event in enumerate(self.events_data):
                 if (
-                    event["title"] == event_data["title"]
-                    and event["description"] == event_data["description"]
-                    and event["video_path"] == event_data["video_path"]
-                    and event["time"] == event_data["time"]
+                    event.title == new_event.title
+                    and event.description == new_event.description
+                    and event.video_path == new_event.video_path
+                    and ((event.time is None and new_event.time is None) or
+                         (event.time is not None and new_event.time is not None and 
+                          event.time == new_event.time))
                 ):
                     index = i
                     break
 
             # Emit signal for scheduler
-            self.event_edited.emit(index, event_data)
+            self.event_edited.emit(index, new_event)
 
     def remove_event(self):
         # Get selected row
@@ -525,7 +569,7 @@ class ConsoleWindow(QMainWindow):
         reply = QMessageBox.question(
             self,
             "Remove Event",
-            f"Are you sure you want to remove the event '{self.events_data[row]['title']}'?",
+            f"Are you sure you want to remove the event '{self.events_data[row].title}'?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
