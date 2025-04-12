@@ -172,41 +172,16 @@ class EventScheduler(QObject):
                 next_event_index = i
                 break
 
-        # If there's a current event running, check if it's finished
+        # --- Check if the current event (if any) has finished ---
+        previous_current_index = (
+            self.current_event_index
+        )  # Store index before potential changes
+
         if self.current_event_index >= 0:
-            # In a real app, we'd check if video is still playing
-            # For now, let's simulate video duration of 10 seconds
             current_event = self.events[self.current_event_index]
 
-            # Skip this check for unscheduled events
-            if current_event.time is not None:
-                if (now - current_event.time).total_seconds() > 10:
-                    # Video finished - but keep track of this as the current event
-                    # Do NOT set self.current_event_index = -1
-
-                    if next_event_index >= 0:
-                        next_event = self.scheduled_events[next_event_index]
-                        seconds_to_next = int((next_event.time - now).total_seconds())
-                        self.seconds_to_next = seconds_to_next
-                        self.event_finished.emit(
-                            next_event.title,
-                            seconds_to_next,
-                            current_event.title,
-                            current_event.description,
-                        )
-                        self.countdown_timer.start(1000)
-                    else:
-                        self.event_finished.emit(
-                            "No more events",
-                            0,
-                            current_event.title,
-                            current_event.description,
-                        )
-
-                    # Keep current_event_index as is, just update console window
-                    self.current_event_signal.emit(self.current_event_index)
-
-        # Check if we need to start a new scheduled event
+        # --- Check if a new scheduled event needs to start ---
+        new_event_started = False
         if next_event_index >= 0:
             next_event = self.scheduled_events[next_event_index]
             seconds_to_next = int((next_event.time - now).total_seconds())
@@ -218,6 +193,7 @@ class EventScheduler(QObject):
                     next_event_full_index = i
                     break
 
+            # Check if it's time to start the next event AND it's not already the current one
             if (
                 seconds_to_next <= 0
                 and self.current_event_index != next_event_full_index
@@ -226,12 +202,66 @@ class EventScheduler(QObject):
                 if self.countdown_timer.isActive():
                     self.countdown_timer.stop()
 
-                # Start the event
+                # Update the current event index
                 self.current_event_index = next_event_full_index
+                new_event_started = True
+
+                # Emit signals for the new event starting
                 self.event_started.emit(
                     next_event.video_path, next_event.title, next_event.description
                 )
-                self.current_event_signal.emit(next_event_full_index)
+                # Signal the console *only* when the index actually changes
+                self.current_event_signal.emit(self.current_event_index)
+
+        # --- Handle state *after* potential event completion if no new event started ---
+        if not new_event_started and self.current_event_index >= 0:
+            # If no new event started, but we have a current (potentially finished) event,
+            # ensure the countdown/next event info is up-to-date.
+            current_event = self.events[self.current_event_index]
+
+            if next_event_index >= 0:
+                # There's a next scheduled event
+                next_event = self.scheduled_events[next_event_index]
+                seconds_to_next = int((next_event.time - now).total_seconds())
+
+                # Check if the countdown needs restarting or if event_finished needs emitting
+                # We only emit event_finished if the countdown isn't active or needs resetting
+                if (
+                    not self.countdown_timer.isActive()
+                    or self.seconds_to_next != seconds_to_next
+                ):
+                    self.seconds_to_next = seconds_to_next
+                    self.event_finished.emit(
+                        next_event.title,
+                        seconds_to_next,
+                        current_event.title,
+                        current_event.description,
+                    )
+                    if seconds_to_next > 0:  # Start countdown only if there's time left
+                        self.countdown_timer.start(1000)
+                    elif self.countdown_timer.isActive():  # Stop if time ran out
+                        self.countdown_timer.stop()
+
+            else:
+                # No more scheduled events after the current one
+                # Check if we need to signal that there are no more events
+                if (
+                    not self.countdown_timer.isActive() and self.seconds_to_next > 0
+                ):  # Check if it was previously counting down
+                    self.seconds_to_next = 0
+                    self.event_finished.emit(
+                        "No more events",
+                        0,
+                        current_event.title,
+                        current_event.description,
+                    )
+                    if self.countdown_timer.isActive():  # Ensure timer stops
+                        self.countdown_timer.stop()
+
+            # If the index changed implicitly (e.g., list reorder not reflected yet), signal console.
+            # This is a safeguard, the primary signal is when a new event starts.
+            if self.current_event_index != previous_current_index:
+                self.current_event_signal.emit(self.current_event_index)
 
     def trigger_event(self, event_index):
         """
