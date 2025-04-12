@@ -392,63 +392,42 @@ class ConsoleWindow(QMainWindow):
 
         value = item.text()
 
-        # Create event data dict to send to scheduler
-        current_event = self.events_data[row]
-        event_dict = {
-            "time": current_event.time_iso,
-            "video_path": current_event.video_path,
-            "title": current_event.title,
-            "description": current_event.description,
-        }
+        # Get the current event object to modify
+        event = self.events_data[row]
 
-        # Update the appropriate field
+        # Update the appropriate field directly on the event object
         if column == 1:  # Date column
             if value.lower() == "unscheduled" or value == "":
                 # Convert to an unscheduled event
-                event_dict["time"] = None
-            elif event_dict["time"] is None:
+                event.set_time(None)
+            elif event.time is None:
                 # Converting from unscheduled to scheduled - use current date and default time
                 now = datetime.now()
-                event_dict["time"] = f"{value}T{now.strftime('%H:%M:%S')}"
+                event.set_time(f"{value}T{now.strftime('%H:%M:%S')}")
             else:
-                # Parse existing time
-                dt = parser.parse(event_dict["time"])
-                # Get the time part
-                time_part = dt.strftime("%H:%M:%S")
+                # Get the time part from existing time
+                time_part = event.time.strftime("%H:%M:%S")
                 # Combine with new date
-                event_dict["time"] = f"{value}T{time_part}"
+                event.set_time(f"{value}T{time_part}")
         elif column == 2:  # Time column
             if value.lower() == "unscheduled" or value == "":
                 # Convert to an unscheduled event
-                event_dict["time"] = None
-            elif event_dict["time"] is None:
+                event.set_time(None)
+            elif event.time is None:
                 # Converting from unscheduled to scheduled - use current date and new time
                 now = datetime.now()
-                event_dict["time"] = f"{now.strftime('%Y-%m-%d')}T{value}"
+                event.set_time(f"{now.strftime('%Y-%m-%d')}T{value}")
             else:
-                # Parse existing time
-                dt = parser.parse(event_dict["time"])
-                # Get the date part
-                date_part = dt.strftime("%Y-%m-%d")
+                # Get the date part from existing time
+                date_part = event.time.strftime("%Y-%m-%d")
                 # Combine with new time
-                event_dict["time"] = f"{date_part}T{value}"
+                event.set_time(f"{date_part}T{value}")
         elif column == 3:
-            event_dict["video_path"] = value
+            event.video_path = value
         elif column == 4:
-            event_dict["title"] = value
+            event.title = value
         elif column == 5:
-            event_dict["description"] = value
-
-        # Create a new event object
-        new_event = Event(
-            event_dict["time"],
-            event_dict["video_path"],
-            event_dict["title"],
-            event_dict["description"],
-        )
-
-        # Update events_data
-        self.events_data[row] = new_event
+            event.description = value
 
         # Save changes immediately
         self.save_to_csv()
@@ -457,11 +436,11 @@ class ConsoleWindow(QMainWindow):
         self.update_display_state()
 
         # Emit signal to update the event
-        self.event_edited.emit(row, new_event)
+        self.event_edited.emit(row, event)
         
         # If title or description was changed, emit text_updated signal
         if column == 4 or column == 5:
-            self.text_updated.emit(new_event.title, new_event.description)
+            self.text_updated.emit(event.title, event.description)
 
     def save_to_csv(self):
         if self.csv_path:

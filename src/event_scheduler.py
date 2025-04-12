@@ -45,20 +45,50 @@ class Event:
         """Get the ISO-formatted time string, or None if unscheduled."""
         return self._time.isoformat() if self._time else None
     
+    def set_time(self, time_str: str | None) -> None:
+        """
+        Set the time from an ISO 8601 formatted string or None for unscheduled events.
+        
+        Args:
+            time_str: The ISO 8601 formatted time string, or None for unscheduled events.
+        """
+        self._time = None
+        if time_str:
+            try:
+                dt = parser.parse(time_str, fuzzy=False)
+                self._time = dt.replace(tzinfo=None)
+            except (ValueError, TypeError) as e:
+                print(f"Error parsing date '{time_str}': {e}. Treating as unscheduled.", file=sys.stderr)
+    
     @property
     def video_path(self) -> str:
         """Get the path to the video file."""
         return self._video_path
+    
+    @video_path.setter
+    def video_path(self, value: str) -> None:
+        """Set the path to the video file."""
+        self._video_path = value
     
     @property
     def title(self) -> str:
         """Get the title of the event."""
         return self._title
     
+    @title.setter
+    def title(self, value: str) -> None:
+        """Set the title of the event."""
+        self._title = value
+    
     @property
     def description(self) -> str:
         """Get the description of the event."""
         return self._description
+    
+    @description.setter
+    def description(self, value: str) -> None:
+        """Set the description of the event."""
+        self._description = value
 
 
 class EventScheduler(QObject):
