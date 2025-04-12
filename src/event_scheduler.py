@@ -9,31 +9,35 @@ from src.csv_manager import CSVManager
 
 
 class Event:
-    def __init__(self, time_str, video_path, title, description):
-        # Check if this is an unscheduled event
-        if time_str is None:
-            self.time = None
-        else:
-            # Parse time string with better error handling
+    """Represents a single event with time, video, title, and description."""
+
+    def __init__(self, time_str: str | None, video_path: str, title: str, description: str):
+        """
+        Initializes an Event object.
+
+        Args:
+            time_str: The ISO 8601 formatted time string, or None for unscheduled events.
+            video_path: Path to the video file.
+            title: Title of the event.
+            description: Description of the event.
+        """
+        self.time: datetime | None = None
+        if time_str:
             try:
-                # If it's in ISO format already
                 dt = parser.parse(time_str, fuzzy=False)
-                # Ensure we have a naive datetime (no timezone info)
-                if dt.tzinfo is not None:
-                    dt = dt.replace(tzinfo=None)
-                self.time = dt
-            except Exception as e:
-                print(f"Error parsing date '{time_str}': {e}")
-                # Fallback to current time if parsing fails
-                self.time = datetime.now().replace(tzinfo=None)
+                # Ensure naive datetime (no timezone info) for consistent comparison
+                self.time = dt.replace(tzinfo=None)
+            except (ValueError, TypeError) as e:
+                print(f"Error parsing date '{time_str}': {e}. Treating as unscheduled.", file=sys.stderr)
+                # Keep self.time as None if parsing fails
 
         self.video_path = video_path
         self.title = title
         self.description = description
 
-    def to_dict(self):
-        time_str = self.time.isoformat() if self.time is not None else None
-
+    def to_dict(self) -> dict:
+        """Converts the Event object to a dictionary."""
+        time_str = self.time.isoformat() if self.time else None
         return {
             "time": time_str,
             "video_path": self.video_path,
@@ -43,361 +47,397 @@ class Event:
 
 
 class EventScheduler(QObject):
+    """
+    Manages loading, scheduling, and triggering events based on a CSV file.
+
+    Handles the timing of events, manages scheduled and unscheduled events,
+    and emits signals to update the UI (VisualWindow and ConsoleWindow).
+    """
+
+    # --- Signals ---
     event_started = Signal(str, str, str)  # video_path, title, description
-    event_finished = Signal(
-        str, int, str, str
-    )  # next_title, seconds_to_next, current_title, current_description
+    """Emitted when a scheduled or manually triggered event starts playing."""
+
+    event_finished = Signal(str, int, str, str)
+    """
+    Emitted when an event finishes or when the schedule starts,
+    providing info for the countdown to the next event.
+    Args: next_title, seconds_to_next, current_title, current_description
+    """
+
     update_countdown = Signal(int)  # seconds_remaining
+    """Emitted every second while counting down to the next event."""
+
     all_events_signal = Signal(list)  # list of event dicts
-    current_event_signal = Signal(int)  # index of current event
+    """Emitted when the event list is loaded or modified."""
+
+    current_event_signal = Signal(int)  # index of current event in self.events
+    """Emitted when the currently active event changes."""
 
     def __init__(self):
+        """Initializes the EventScheduler."""
         super().__init__()
-        self.events = []
-        self.scheduled_events = []  # Events with times
-        self.unscheduled_events = []  # Events without times
-        self.current_event_index = -1
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.check_events)
+        self.events: list[Event] = []  # Combined list, sorted scheduled first
+        self.scheduled_events: list[Event] = []  # Events with times, sorted
+        self.unscheduled_events: list[Event] = []  # Events without times
+        self.current_event_index: int = -1 # Index in the combined self.events list
+        self._active_event_object: Event | None = None # The event currently playing/just finished
+
+        self.schedule_check_timer = QTimer(self)
+        self.schedule_check_timer.timeout.connect(self._check_schedule)
         self.countdown_timer = QTimer(self)
-        self.countdown_timer.timeout.connect(self.update_countdown_display)
-        self.seconds_to_next = 0
-        self.csv_path = None
+        self.countdown_timer.timeout.connect(self._tick_countdown)
+        self.seconds_to_next: int = 0
+        self.csv_path: str | None = None
 
-    def load_csv(self, csv_path):
+    def load_events_from_csv(self, csv_path: str):
+        """
+        Loads events from a CSV file, sorts them, and updates internal lists.
+
+        Args:
+            csv_path: Path to the CSV file.
+        """
         if not os.path.exists(csv_path):
-            print(f"CSV file not found: {csv_path}")
-            return
+            print(f"Error: CSV file not found: {csv_path}", file=sys.stderr)
+            exit(1)
 
-        # Store the CSV path
         self.csv_path = csv_path
-
-        # Use CSVManager to load events
         try:
             event_dicts = CSVManager.load_events(csv_path)
         except ValueError as e:
-            print(f"Error loading CSV file: {e}", file=sys.stderr)
+            print(f"Error loading CSV file '{csv_path}': {e}", file=sys.stderr)
             exit(1)
+
         self.events = []
         self.scheduled_events = []
         self.unscheduled_events = []
+        self.current_event_index = -1 # Reset index on reload
+        self._active_event_object = None
 
         for event_dict in event_dicts:
             event = Event(
-                event_dict["time"],
-                event_dict["video_path"],
-                event_dict["title"],
-                event_dict["description"],
+                event_dict.get("time"), # Use .get for safety
+                event_dict.get("video_path", ""),
+                event_dict.get("title", "Untitled Event"),
+                event_dict.get("description", ""),
             )
-            self.events.append(event)
-
-            # Separate scheduled and unscheduled events
-            if event.time is None:
-                self.unscheduled_events.append(event)
-            else:
+            # Add to appropriate lists
+            if event.time:
                 self.scheduled_events.append(event)
+            else:
+                self.unscheduled_events.append(event)
 
         # Sort scheduled events by time
         self.scheduled_events.sort(key=lambda x: x.time)
 
-        # Rebuild main events list with scheduled events first, then unscheduled
+        # Rebuild the main events list: sorted scheduled events followed by unscheduled
         self.events = self.scheduled_events + self.unscheduled_events
 
-        # Signal the console window to update the event list
+        # Signal the UI about the updated list
         self.all_events_signal.emit([event.to_dict() for event in self.events])
+        print(f"Loaded {len(self.events)} events ({len(self.scheduled_events)} scheduled).")
+
 
     def start(self):
-        if not self.scheduled_events:
-            # No scheduled events, just show a message
-            self.event_finished.emit(
-                "No scheduled events", 0, "SBDStream", "No scheduled events found"
-            )
+        """
+        Starts the event scheduling process.
+
+        Finds the most recently passed event (if any) to set the initial state,
+        then finds the next upcoming event and starts the countdown.
+        Starts the main timer to check for scheduled event times.
+        """
+        if not self.events:
+            print("No events loaded.")
+            self.event_finished.emit("No events", 0, "SBDStream", "Load a CSV file.")
             return
 
-        # Initialize countdown to first event
         now = datetime.now().replace(tzinfo=None)
-        next_event_index = -1
-        most_recent_past_index = -1
+        most_recent_past_scheduled_event: Event | None = None
+        most_recent_past_scheduled_event_index_in_all: int = -1
 
-        # Find the most recent past event and next upcoming event
+        # Find the most recent past *scheduled* event to define the starting "current" state
         for i, event in enumerate(self.scheduled_events):
             if event.time <= now:
-                # This event has already passed - always update to get the most recent one
-                most_recent_past_index = i
-            elif event.time > now:
-                next_event_index = i
+                most_recent_past_scheduled_event = event
+            else:
+                # Since scheduled_events is sorted, we can stop early
                 break
 
-        # Set the most recent past event as the current event
-        if most_recent_past_index >= 0:
-            # Find the actual index in the full events list
-            for i, event in enumerate(self.events):
-                if event is self.scheduled_events[most_recent_past_index]:
-                    self.current_event_index = i
-                    self.current_event_signal.emit(i)
-                    break
+        if most_recent_past_scheduled_event:
+             # Find its index in the combined list
+            try:
+                most_recent_past_scheduled_event_index_in_all = self.events.index(most_recent_past_scheduled_event)
+                self.current_event_index = most_recent_past_scheduled_event_index_in_all
+                self._active_event_object = most_recent_past_scheduled_event # Set the initial active event
+                self.current_event_signal.emit(self.current_event_index)
+                print(f"Starting after event: {self._active_event_object.title}")
+            except ValueError:
+                 # Should not happen if lists are consistent
+                 print("Error: Could not find last past event in the main list.", file=sys.stderr)
+                 self.current_event_index = -1
+                 self._active_event_object = None
+        else:
+            print("No past scheduled events found.")
+            # If no past event, the initial "current" state is effectively before the first event.
+            self.current_event_index = -1
+            self._active_event_object = None
 
-        # Set up countdown to next event
-        if next_event_index >= 0:
-            next_event = self.scheduled_events[next_event_index]
-            seconds_to_next = int((next_event.time - now).total_seconds())
+
+        # Setup countdown to the *next* scheduled event and start checking timer
+        self._update_state_after_event()
+        self.schedule_check_timer.start(1000) # Check every second
+        print("Event scheduler started.")
+
+
+    def _check_schedule(self):
+        """
+        Checks if the next scheduled event's time has arrived.
+
+        This is called periodically by `schedule_check_timer`.
+        If a new event should start, it stops the countdown and starts the event.
+        """
+        now = datetime.now().replace(tzinfo=None)
+        next_event, next_event_index_in_all = self._find_next_scheduled_event(now)
+
+        if next_event and next_event.time <= now:
+            # Time for the next scheduled event has arrived.
+            # Check if it's different from the currently active event (if any)
+            # or if no event is active.
+            is_new_event = (self._active_event_object is None or
+                            next_event is not self._active_event_object)
+
+            if is_new_event:
+                print(f"Scheduled event starting: {next_event.title}")
+                if self.countdown_timer.isActive():
+                    self.countdown_timer.stop()
+                    self.seconds_to_next = 0 # Reset countdown
+
+                self.current_event_index = next_event_index_in_all
+                self._active_event_object = next_event # Update active event
+
+                self.event_started.emit(
+                    next_event.video_path, next_event.title, next_event.description
+                )
+                self.current_event_signal.emit(self.current_event_index)
+
+
+    def trigger_event(self, event_index: int):
+        """
+        Manually triggers an event by its index in the main `events` list.
+
+        Works for both scheduled and unscheduled events. Stops any active countdown.
+
+        Args:
+            event_index: The index of the event to trigger in the `self.events` list.
+        """
+        if 0 <= event_index < len(self.events):
+            triggered_event = self.events[event_index]
+            print(f"Manually triggering event: {triggered_event.title} (Index: {event_index})")
+
+            if self.countdown_timer.isActive():
+                self.countdown_timer.stop()
+                self.seconds_to_next = 0 # Reset countdown
+
+            self.current_event_index = event_index
+            self._active_event_object = triggered_event # Update active event
+
+            self.event_started.emit(
+                triggered_event.video_path,
+                triggered_event.title,
+                triggered_event.description,
+            )
+            # Emit signal *after* index is updated
+            self.current_event_signal.emit(self.current_event_index)
+        else:
+            print(f"Error: Invalid event index {event_index} triggered.", file=sys.stderr)
+
+
+    def handle_video_finished(self):
+        """
+        Handles the completion of video playback.
+
+        Determines the next scheduled event and starts the countdown.
+        This should be called by the VisualWindow when the video player state changes to stopped/finished.
+        """
+        if self._active_event_object:
+             print(f"Video finished for event: {self._active_event_object.title}")
+        else:
+             print("Video finished, but no active event was recorded.")
+             # Still try to update state in case something went wrong
+        self._update_state_after_event()
+
+
+    def _update_state_after_event(self):
+        """
+        Finds the next scheduled event and emits `event_finished` to start the countdown.
+
+        This is called by `start()`, `handle_video_finished()`.
+        It sets up the transition *to* the next event's waiting period.
+        """
+        now = datetime.now().replace(tzinfo=None)
+        next_event, _ = self._find_next_scheduled_event(now) # We only need the event obj here
+
+        current_title = "SBDStream"
+        current_description = "No active event"
+        if self._active_event_object:
+            current_title = self._active_event_object.title
+            current_description = self._active_event_object.description
+
+        if next_event:
+            seconds_to_next = max(0, int((next_event.time - now).total_seconds()))
             self.seconds_to_next = seconds_to_next
-
-            # Include current event info if available
-            current_title = "SBDStream"
-            current_description = "Loading scheduled events..."
-            if most_recent_past_index >= 0:
-                current_event = self.scheduled_events[most_recent_past_index]
-                current_title = current_event.title
-                current_description = current_event.description
-
+            print(f"Next scheduled event: '{next_event.title}' in {seconds_to_next}s")
             self.event_finished.emit(
                 next_event.title,
                 seconds_to_next,
                 current_title,
                 current_description,
             )
-            self.countdown_timer.start(1000)
-
-        # Start the main timer
-        self.timer.start(1000)  # Check every second
-
-    def check_events(self):
-        now = datetime.now().replace(tzinfo=None)
-
-        # Find the next scheduled event
-        next_event_index = -1
-        for i, event in enumerate(self.scheduled_events):
-            if event.time > now:
-                next_event_index = i
-                break
-
-        # --- Check if the current event (if any) has finished ---
-        previous_current_index = (
-            self.current_event_index
-        )  # Store index before potential changes
-
-        if self.current_event_index >= 0:
-            current_event = self.events[self.current_event_index]
-
-        # --- Check if a new scheduled event needs to start ---
-        new_event_started = False
-        if next_event_index >= 0:
-            next_event = self.scheduled_events[next_event_index]
-            seconds_to_next = int((next_event.time - now).total_seconds())
-
-            # Find the actual index in the full events list
-            next_event_full_index = -1
-            for i, event in enumerate(self.events):
-                if event is next_event:
-                    next_event_full_index = i
-                    break
-
-            # Check if it's time to start the next event AND it's not already the current one
-            if (
-                seconds_to_next <= 0
-                and self.current_event_index != next_event_full_index
-            ):
-                # Stop countdown if running
-                if self.countdown_timer.isActive():
-                    self.countdown_timer.stop()
-
-                # Update the current event index
-                self.current_event_index = next_event_full_index
-                new_event_started = True
-
-                # Emit signals for the new event starting
-                self.event_started.emit(
-                    next_event.video_path, next_event.title, next_event.description
-                )
-                # Signal the console *only* when the index actually changes
-                self.current_event_signal.emit(self.current_event_index)
-
-        # --- Handle state *after* potential event completion if no new event started ---
-        if not new_event_started and self.current_event_index >= 0:
-            # If no new event started, but we have a current (potentially finished) event,
-            # ensure the countdown/next event info is up-to-date.
-            current_event = self.events[self.current_event_index]
-
-            if next_event_index >= 0:
-                # There's a next scheduled event
-                next_event = self.scheduled_events[next_event_index]
-                seconds_to_next = int((next_event.time - now).total_seconds())
-
-                # Check if the countdown needs restarting or if event_finished needs emitting
-                # We only emit event_finished if the countdown isn't active or needs resetting
-                if (
-                    not self.countdown_timer.isActive()
-                    or self.seconds_to_next != seconds_to_next
-                ):
-                    self.seconds_to_next = seconds_to_next
-                    self.event_finished.emit(
-                        next_event.title,
-                        seconds_to_next,
-                        current_event.title,
-                        current_event.description,
-                    )
-                    if seconds_to_next > 0:  # Start countdown only if there's time left
-                        self.countdown_timer.start(1000)
-                    elif self.countdown_timer.isActive():  # Stop if time ran out
-                        self.countdown_timer.stop()
-
-            else:
-                # No more scheduled events after the current one
-                # Check if we need to signal that there are no more events
-                if (
-                    not self.countdown_timer.isActive() and self.seconds_to_next > 0
-                ):  # Check if it was previously counting down
-                    self.seconds_to_next = 0
-                    self.event_finished.emit(
-                        "No more events",
-                        0,
-                        current_event.title,
-                        current_event.description,
-                    )
-                    if self.countdown_timer.isActive():  # Ensure timer stops
-                        self.countdown_timer.stop()
-
-            # If the index changed implicitly (e.g., list reorder not reflected yet), signal console.
-            # This is a safeguard, the primary signal is when a new event starts.
-            if self.current_event_index != previous_current_index:
-                self.current_event_signal.emit(self.current_event_index)
-
-    def trigger_event(self, event_index):
-        """
-        Manually trigger an event by its index in the events list.
-        Works for both scheduled and unscheduled events.
-        """
-        if 0 <= event_index < len(self.events):
-            triggered_event = self.events[event_index]
-
-            # Stop countdown if running
-            if self.countdown_timer.isActive():
-                self.countdown_timer.stop()
-
-            # Play the video for this event
-            self.current_event_index = event_index
-            self.event_started.emit(
-                triggered_event.video_path,
-                triggered_event.title,
-                triggered_event.description,
-            )
-            self.current_event_signal.emit(event_index)
-
-            # Find the next scheduled event and update seconds_to_next
-            # (Will be used when video finishes and handle_video_finished is called)
-            now = datetime.now().replace(tzinfo=None)
-            next_event_index = -1
-            for i, event in enumerate(self.scheduled_events):
-                if event.time > now:
-                    next_event_index = i
-                    break
-
-            if next_event_index >= 0:
-                next_event = self.scheduled_events[next_event_index]
-                self.seconds_to_next = int((next_event.time - now).total_seconds())
-            else:
-                # No more scheduled events
-                self.seconds_to_next = 0
-
-    def handle_video_finished(self):
-        """
-        Handle video playback completion - show countdown to next event
-        """
-        if self.current_event_index < 0 or self.current_event_index >= len(self.events):
-            return
-
-        current_event = self.events[self.current_event_index]
-
-        # Find the next scheduled event
-        now = datetime.now().replace(tzinfo=None)
-        next_event_index = -1
-        for i, event in enumerate(self.scheduled_events):
-            if event.time > now:
-                next_event_index = i
-                break
-
-        if next_event_index >= 0:
-            next_event = self.scheduled_events[next_event_index]
-            seconds_to_next = int((next_event.time - now).total_seconds())
-            self.seconds_to_next = seconds_to_next
-            self.event_finished.emit(
-                next_event.title,
-                seconds_to_next,
-                current_event.title,
-                current_event.description,
-            )
-            self.countdown_timer.start(1000)
+            if seconds_to_next > 0 and not self.countdown_timer.isActive():
+                self.countdown_timer.start(1000)
+            elif seconds_to_next <= 0 and self.countdown_timer.isActive():
+                self.countdown_timer.stop() # Stop if already passed
         else:
             # No more scheduled events
+            print("No more scheduled events.")
+            self.seconds_to_next = 0
+            if self.countdown_timer.isActive():
+                self.countdown_timer.stop()
             self.event_finished.emit(
                 "No more events",
                 0,
-                current_event.title,
-                current_event.description,
+                current_title,
+                current_description,
             )
 
-    def finish_triggered_event(
-        self, next_title, seconds_to_next, current_title, current_description
-    ):
-        """Helper method to show countdown after a triggered event finishes (deprecated)"""
-        self.event_finished.emit(
-            next_title, seconds_to_next, current_title, current_description
-        )
-        if seconds_to_next > 0:
-            self.countdown_timer.start(1000)
+    def _find_next_scheduled_event(self, reference_time: datetime) -> tuple[Event | None, int]:
+        """
+        Finds the first scheduled event occurring after the reference time.
 
-    def update_countdown_display(self):
+        Args:
+            reference_time: The time to find events after.
+
+        Returns:
+            A tuple containing the next Event object (or None) and its index
+            in the main `self.events` list (-1 if not found).
+        """
+        next_scheduled_event = None
+        for event in self.scheduled_events:
+            if event.time > reference_time:
+                next_scheduled_event = event
+                break
+
+        if next_scheduled_event:
+            try:
+                index_in_all = self.events.index(next_scheduled_event)
+                return next_scheduled_event, index_in_all
+            except ValueError:
+                print(f"Error: Could not find next scheduled event '{next_scheduled_event.title}' in main list.", file=sys.stderr)
+                return None, -1 # Consistency issue
+        else:
+            return None, -1 # No more scheduled events
+
+    def _tick_countdown(self):
+        """Decrements the countdown timer and emits the update signal."""
         if self.seconds_to_next > 0:
             self.seconds_to_next -= 1
             self.update_countdown.emit(self.seconds_to_next)
+            if self.seconds_to_next == 0:
+                 # Optional: Stop timer slightly early if precision isn't critical
+                 # and _check_schedule handles the final trigger reliably.
+                 # self.countdown_timer.stop()
+                 pass # Let _check_schedule handle the exact moment
         else:
-            self.countdown_timer.stop()
+            # Should ideally be stopped by _check_schedule or _update_state_after_event
+            if self.countdown_timer.isActive():
+                self.countdown_timer.stop()
 
-    def update_event(self, index, event_dict):
+
+    def update_event(self, index: int, event_dict: dict):
+        """
+        Updates an event at a specific index in the main `events` list.
+
+        Reloads the event data, re-sorts scheduled events, rebuilds the
+        main list, updates the UI, potentially adjusts the current event index,
+        and saves the changes back to the CSV.
+
+        Args:
+            index: The index of the event to update in the `self.events` list.
+            event_dict: A dictionary containing the new event data.
+        """
         if 0 <= index < len(self.events):
+            original_event = self.events[index]
             new_event = Event(
-                event_dict["time"],
-                event_dict["video_path"],
-                event_dict["title"],
-                event_dict["description"],
+                event_dict.get("time"),
+                event_dict.get("video_path", ""),
+                event_dict.get("title", "Untitled Event"),
+                event_dict.get("description", ""),
             )
 
-            # Update the event
-            self.events[index] = new_event
+            print(f"Updating event at index {index}: '{original_event.title}' -> '{new_event.title}'")
 
-            # Update scheduled/unscheduled collections
-            self.scheduled_events = [e for e in self.events if e.time is not None]
-            self.unscheduled_events = [e for e in self.events if e.time is None]
+            # --- Update internal lists ---
+            # 1. Remove original event from its specific list (scheduled/unscheduled)
+            if original_event.time:
+                if original_event in self.scheduled_events:
+                    self.scheduled_events.remove(original_event)
+            else:
+                if original_event in self.unscheduled_events:
+                    self.unscheduled_events.remove(original_event)
 
-            # Sort scheduled events by time
-            self.scheduled_events.sort(key=lambda x: x.time)
+            # 2. Add the new event to the correct specific list
+            if new_event.time:
+                self.scheduled_events.append(new_event)
+                # Re-sort scheduled events as time might have changed
+                self.scheduled_events.sort(key=lambda x: x.time)
+            else:
+                self.unscheduled_events.append(new_event)
 
-            # Rebuild the events list with scheduled first, then unscheduled
+            # 3. Rebuild the main events list
             self.events = self.scheduled_events + self.unscheduled_events
 
-            # Update the event list
+            # --- Update State and UI ---
+            # 4. Signal the UI about the updated full list
             self.all_events_signal.emit([event.to_dict() for event in self.events])
 
-            # Update current event index if needed
-            if self.current_event_index >= 0:
-                # Find the new index of the current event
+            # 5. Update current_event_index if the *active* event was the one modified
+            #    or if the list reordering affected its index.
+            new_active_event_index = -1
+            if self._active_event_object:
                 try:
-                    if new_event.time is None:
-                        # If event became unscheduled, keep the index
-                        self.current_event_signal.emit(index)
-                    else:
-                        # Find the new index after sorting
-                        self.current_event_index = self.events.index(new_event)
-                        self.current_event_signal.emit(self.current_event_index)
+                    # Find the potentially new index of the active event object
+                    new_active_event_index = self.events.index(self._active_event_object)
                 except ValueError:
-                    # If event no longer exists, reset current index
-                    self.current_event_index = -1
+                     # The active event object is no longer in the list (e.g., deleted?)
+                     # This case shouldn't happen with 'update', but handle defensively.
+                     print(f"Warning: Active event '{self._active_event_object.title}' not found after update.", file=sys.stderr)
+                     self._active_event_object = None # Reset active event
+                     self.current_event_index = -1 # Reset index
+                     # Need to re-evaluate the schedule state
+                     self._update_state_after_event() # Reset countdown etc.
 
-            # Save changes to CSV immediately
+            if new_active_event_index != self.current_event_index:
+                if new_active_event_index != -1:
+                     print(f"Current event index shifted to {new_active_event_index} due to update.")
+                self.current_event_index = new_active_event_index
+                self.current_event_signal.emit(self.current_event_index) # Signal only if changed
+
+            # --- Persist Changes ---
+            # 6. Save changes to CSV
             self.save_to_csv()
 
+        else:
+             print(f"Error: Invalid index {index} for update_event.", file=sys.stderr)
+
+
     def save_to_csv(self):
+        """Saves the current state of all events back to the loaded CSV file."""
         if self.csv_path:
-            events_dict = [event.to_dict() for event in self.events]
-            CSVManager.save_events(self.csv_path, events_dict)
+            try:
+                events_dict = [event.to_dict() for event in self.events]
+                CSVManager.save_events(self.csv_path, events_dict)
+                print(f"Events saved to {self.csv_path}")
+            except Exception as e:
+                print(f"Error saving events to {self.csv_path}: {e}", file=sys.stderr)
+        else:
+            print("Error: Cannot save events, CSV path not set.", file=sys.stderr)

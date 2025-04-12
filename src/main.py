@@ -50,7 +50,7 @@ def main():
         os.makedirs(data_dir)
 
     # Load CSV in scheduler
-    scheduler.load_csv(csv_path)
+    scheduler.load_events_from_csv(csv_path)
 
     # Save the CSV path to the console window
     console_window.csv_path = csv_path
