@@ -71,28 +71,6 @@ def main():
     visual_window.show()
     console_window.show()
 
-    # Initialize the countdown with first event if available
-    # No longer needed - scheduler.start() handles finding the current state
-    # and emitting signals which will update the console and visual windows.
-    # now = datetime.now()
-    # Find the most recent past event and next upcoming event
-    # most_recent_past_event = None
-    # for i, event in enumerate(scheduler.events):
-    #     if event.time <= now:
-    #         # This event has already passed - always update to get the most recent one
-    #         most_recent_past_event = event
-    #     elif event.time > now:
-    #         break
-    # if most_recent_past_event:
-    #     # Also update the scheduler's current event index
-    #     for i, event in enumerate(scheduler.events):
-    #         if event.time == most_recent_past_event.time:
-    #             scheduler.current_event_index = i
-    #             scheduler.current_event_signal.emit(i)
-    #             break
-
-    # visual_window.show_countdown(next_title, seconds_to_next, current_title, current_description)
-
     # Start the scheduler (this will now emit initial state signals)
     scheduler.start()
 

@@ -151,9 +151,13 @@ class VisualWindow(QMainWindow):
         self.video_widget.show()
         self.countdown_widget.hide()
 
-        # Play the video
-        self.media_player.setSource(QUrl.fromLocalFile(video_path))
-        self.media_player.play()
+        # Only play the video if we have a valid path
+        if video_path:
+            self.media_player.setSource(QUrl.fromLocalFile(video_path))
+            self.media_player.play()
+        else:
+            # If no video path, emit finished signal immediately
+            self.video_finished.emit()
 
     def show_countdown(
         self, next_title, seconds_to_next, current_title=None, current_description=None
