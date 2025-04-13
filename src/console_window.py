@@ -278,7 +278,7 @@ class ConsoleWindow(QMainWindow):
             # Create order item (initially empty)
             order_item = QTableWidgetItem("")
             order_item.setFlags(order_item.flags() & ~Qt.ItemIsEditable)  # Not editable
-            order_item.setBackground(QBrush(QColor("#2A4A4A")))
+            order_item.setBackground(QBrush(QColor(75, 75, 75)))
             self.event_table.setItem(i, 0, order_item)
 
             # Add data cells
@@ -360,7 +360,7 @@ class ConsoleWindow(QMainWindow):
             )
             base_brush = QBrush()
             if is_unscheduled:
-                base_brush = QBrush(QColor("#3A2A4A"))
+                base_brush = QBrush(QColor(53, 53, 53))
 
             for j in range(1, self.event_table.columnCount()):  # Skip Order column (0)
                 item = self.event_table.item(i, j)
@@ -371,7 +371,7 @@ class ConsoleWindow(QMainWindow):
 
         # Highlight the current event row (overriding base color)
         if 0 <= self._current_event_index < self.event_table.rowCount():
-            highlight_brush = QBrush(QColor(42, 130, 218))  # Use theme highlight color
+            highlight_brush = QBrush(QColor(50, 75, 25))  # Use theme highlight color
             for j in range(1, self.event_table.columnCount()):
                 item = self.event_table.item(self._current_event_index, j)
                 if item:
@@ -393,57 +393,20 @@ class ConsoleWindow(QMainWindow):
             self._current_events
         ):
             print("No current event to base ordering on.")
-            # Optionally number all future events from 1? Or leave blank.
-            # Let's number future scheduled events starting from 1 for clarity.
-            future_events = []
-            unscheduled_events = []
-            for i, event in enumerate(self._current_events):
-                if event.time is not None and event.time > now:
-                    future_events.append((i, event.time))
-                elif event.time is None:
-                    unscheduled_events.append(i)
-
-            future_events.sort(key=lambda x: x[1])
-            order_num = 1
-            for row_idx, _ in future_events:
-                order_item = self.event_table.item(row_idx, 0)
-                if order_item:
-                    order_item.setText(str(order_num))
-                order_num += 1
-            # Optionally number unscheduled after future?
-            # for row_idx in unscheduled_events:
-            #     order_item = self.event_table.item(row_idx, 0)
-            #     if order_item:
-            #         order_item.setText(f"U{order_num}") # Indicate unscheduled
-            #     order_num += 1
-            return  # Exit early
-
-        # Set "Now" for the current event
-        current_order_item = self.event_table.item(self._current_event_index, 0)
-        if current_order_item:
-            current_order_item.setText("Now")
+        else:
+            # Set "Now" for the current event
+            current_order_item = self.event_table.item(self._current_event_index, 0)
+            if current_order_item:
+                current_order_item.setText("Now")
 
         # Lists for future events (relative to the *current* event's time if available, else now)
         # and unscheduled events
         future_events = []
-        unscheduled_events = []
-        current_event_time = self._current_events[self._current_event_index].time
-        reference_time = current_event_time if current_event_time else now
 
         # Categorize events relative to the reference time
         for i, event in enumerate(self._current_events):
-            # Skip the current event itself when assigning future numbers
-            if i == self._current_event_index:
-                continue
-
-            if event.time is not None:
-                # Only consider events strictly after the reference time as "next"
-                if event.time > reference_time:
-                    future_events.append((i, event.time))
-                # Past/concurrent events relative to reference_time get no number (already cleared)
-            else:
-                # Unscheduled events are numbered after all scheduled future events
-                unscheduled_events.append(i)
+            if event.time is not None and event.time > now:
+                future_events.append((i, event.time))
 
         # Sort future events by time
         future_events.sort(key=lambda x: x[1])
@@ -453,39 +416,11 @@ class ConsoleWindow(QMainWindow):
         for row_idx, _ in future_events:
             order_item = self.event_table.item(row_idx, 0)
             if order_item:
-                order_item.setText(str(next_order))
+                if row_idx == self._current_event_index:
+                    order_item.setText(f"Now, {next_order}")
+                else:
+                    order_item.setText(str(next_order))
                 next_order += 1
-
-        # Assign order numbers to unscheduled events (after future scheduled ones)
-        for row_idx in unscheduled_events:
-            order_item = self.event_table.item(row_idx, 0)
-            if order_item:
-                # Simple numbering after scheduled, could use 'U' prefix if needed
-                order_item.setText(f"U{next_order}")
-                next_order += 1
-
-        # Special case: if the "Now" event is *also* in the future relative to 'now'
-        # (e.g. triggered early), add its future order number.
-        if current_event_time and current_event_time > now:
-            future_order_for_current = -1
-            temp_order = 1
-            # Find its position in the sorted future list
-            for idx, t in future_events:
-                if (
-                    idx == self._current_event_index
-                ):  # Should not happen due to skip above, but check
-                    future_order_for_current = temp_order
-                    break
-                if t == current_event_time:  # Find the event itself
-                    future_order_for_current = temp_order
-                    break
-                temp_order += 1
-            # If we found its future order, append it
-            if future_order_for_current > 0 and current_order_item:
-                current_text = current_order_item.text()
-                current_order_item.setText(
-                    f"{current_text}, {future_order_for_current}"
-                )
 
     # --- Event Handlers for UI Actions ---
 
