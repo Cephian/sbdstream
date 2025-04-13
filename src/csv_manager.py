@@ -1,6 +1,7 @@
 import csv
 import os
 from datetime import datetime
+from src.event import Event
 
 
 class CSVManager:
@@ -11,7 +12,7 @@ class CSVManager:
 
         Args:
             csv_path: Path to the CSV file
-            events: List of event dictionaries with time, video_path, title, and description keys
+            events: List of Event objects
         """
         # Ensure directory exists
         os.makedirs(os.path.dirname(csv_path), exist_ok=True)
@@ -26,28 +27,22 @@ class CSVManager:
             # Write events
             for event in events:
                 # Check for unscheduled events
-                if "time" not in event or event["time"] is None:
+                if event.time is None:
                     # This is an unscheduled event
                     date_str = ""
                     time_str = ""
                 else:
-                    # Parse the ISO format datetime to separate date and time
-                    try:
-                        dt = datetime.fromisoformat(event["time"])
-                        date_str = dt.strftime("%Y-%m-%d")
-                        time_str = dt.strftime("%H:%M:%S")
-                    except ValueError:
-                        # Fallback if the time is not in ISO format
-                        date_str = ""
-                        time_str = event["time"]
+                    # Parse the datetime to separate date and time
+                    date_str = event.time.strftime("%Y-%m-%d")
+                    time_str = event.time.strftime("%H:%M:%S")
 
                 writer.writerow(
                     [
                         date_str,
                         time_str,
-                        event["video_path"],
-                        event["title"],
-                        event["description"],
+                        event.video_path,
+                        event.title,
+                        event.description,
                     ]
                 )
 
@@ -62,7 +57,7 @@ class CSVManager:
             csv_path: Path to the CSV file
 
         Returns:
-            List of event dictionaries with time, video_path, title, and description keys
+            List of Event objects
         """
         if not os.path.exists(csv_path):
             return []
@@ -84,12 +79,12 @@ class CSVManager:
 
                 if is_unscheduled:
                     # This is an unscheduled event, set time to None
-                    event = {
-                        "time": None,
-                        "video_path": row.get("Video", ""),
-                        "title": row["Title"].strip(),
-                        "description": row["Description"].strip(),
-                    }
+                    event = Event(
+                        time_str=None,
+                        video_path=row.get("Video", ""),
+                        title=row["Title"].strip(),
+                        description=row["Description"].strip(),
+                    )
                     events.append(event)
                     continue
 
@@ -118,12 +113,12 @@ class CSVManager:
                 except ValueError:
                     raise ValueError(f"Invalid time format in CSV: {time_str}")
 
-                event = {
-                    "time": iso_time,
-                    "video_path": row.get("Video", ""),
-                    "title": row["Title"].strip(),
-                    "description": row["Description"].strip(),
-                }
+                event = Event(
+                    time_str=iso_time,
+                    video_path=row.get("Video", ""),
+                    title=row["Title"].strip(),
+                    description=row["Description"].strip(),
+                )
                 events.append(event)
 
         return events

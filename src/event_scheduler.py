@@ -6,116 +6,7 @@ from dateutil import parser
 from PySide6.QtCore import QObject, Signal, QTimer
 
 from src.csv_manager import CSVManager
-
-
-class Event:
-    """Represents a single event with time, video, title, and description."""
-
-    def __init__(
-        self, time_str: str | None, video_path: str, title: str, description: str
-    ):
-        """
-        Initializes an Event object.
-
-        Args:
-            time_str: The ISO 8601 formatted time string, or None for unscheduled events.
-            video_path: Path to the video file.
-            title: Title of the event.
-            description: Description of the event.
-        """
-        self._time: datetime | None = None
-        if time_str:
-            try:
-                dt = parser.parse(time_str, fuzzy=False)
-                # Ensure naive datetime (no timezone info) for consistent comparison
-                self._time = dt.replace(tzinfo=None)
-            except (ValueError, TypeError) as e:
-                print(
-                    f"Error parsing date '{time_str}': {e}. Treating as unscheduled.",
-                    file=sys.stderr,
-                )
-                # Keep self._time as None if parsing fails
-
-        self._video_path = video_path
-        self._title = title
-        self._description = description
-
-    @property
-    def time(self) -> datetime | None:
-        """Get the datetime of the event, or None if unscheduled."""
-        return self._time
-
-    @property
-    def time_iso(self) -> str | None:
-        """Get the ISO-formatted time string, or None if unscheduled."""
-        return self._time.isoformat() if self._time else None
-
-    def set_time(self, time_str: str | None) -> None:
-        """
-        Set the time from an ISO 8601 formatted string or None for unscheduled events.
-
-        Args:
-            time_str: The ISO 8601 formatted time string, or None for unscheduled events.
-        """
-        self._time = None
-        if time_str:
-            try:
-                dt = parser.parse(time_str, fuzzy=False)
-                self._time = dt.replace(tzinfo=None)
-            except (ValueError, TypeError) as e:
-                print(
-                    f"Error parsing date '{time_str}': {e}. Treating as unscheduled.",
-                    file=sys.stderr,
-                )
-
-    @property
-    def video_path(self) -> str:
-        """Get the path to the video file."""
-        return self._video_path
-
-    @video_path.setter
-    def video_path(self, value: str) -> None:
-        """Set the path to the video file."""
-        self._video_path = value
-
-    @property
-    def title(self) -> str:
-        """Get the title of the event."""
-        return self._title
-
-    @title.setter
-    def title(self, value: str) -> None:
-        """Set the title of the event."""
-        self._title = value
-
-    @property
-    def description(self) -> str:
-        """Get the description of the event."""
-        return self._description
-
-    @description.setter
-    def description(self, value: str) -> None:
-        """Set the description of the event."""
-        self._description = value
-
-    def seconds_until(self, reference_time: datetime | None = None) -> float | None:
-        """
-        Returns the number of seconds until this event from the reference time.
-        Returns None if the event is unscheduled.
-
-        Args:
-            reference_time: The time to calculate seconds from. If None, uses current time.
-
-        Returns:
-            float | None: Number of seconds until the event, or None if unscheduled
-        """
-        if self._time is None:
-            return None
-
-        if reference_time is None:
-            reference_time = datetime.now().replace(tzinfo=None)
-
-        return (self._time - reference_time).total_seconds()
+from src.event import Event
 
 
 class EventScheduler(QObject):
@@ -186,24 +77,17 @@ class EventScheduler(QObject):
 
         self.csv_path = csv_path
         try:
-            event_dicts = CSVManager.load_events(csv_path)
+            self.events = CSVManager.load_events(csv_path)
         except ValueError as e:
             print(f"Error loading CSV file '{csv_path}': {e}", file=sys.stderr)
             exit(1)
 
-        self.events = []
         self.scheduled_events = []
         self.unscheduled_events = []
         self.current_event_index = -1  # Reset index on reload
         self._active_event_object = None
 
-        for event_dict in event_dicts:
-            event = Event(
-                event_dict.get("time"),  # Use .get for safety
-                event_dict.get("video_path", ""),
-                event_dict.get("title", "Untitled Event"),
-                event_dict.get("description", ""),
-            )
+        for event in self.events:
             # Add to appropriate lists
             if event.time:
                 self.scheduled_events.append(event)
@@ -732,22 +616,12 @@ class EventScheduler(QObject):
         """Saves the current state of all events back to the loaded CSV file."""
         if self.csv_path:
             try:
-                events_dict = [self._event_to_dict(event) for event in self.events]
-                CSVManager.save_events(self.csv_path, events_dict)
+                CSVManager.save_events(self.csv_path, self.events)
                 print(f"Events saved to {self.csv_path}")
             except Exception as e:
                 print(f"Error saving events to {self.csv_path}: {e}", file=sys.stderr)
         else:
             print("Error: Cannot save events, CSV path not set.", file=sys.stderr)
-
-    def _event_to_dict(self, event: Event) -> dict:
-        """Convert an Event object to a dictionary for CSV saving."""
-        return {
-            "time": event.time_iso,
-            "video_path": event.video_path,
-            "title": event.title,
-            "description": event.description,
-        }
 
     def next_event(
         self, reference_time: datetime | None = None
