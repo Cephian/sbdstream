@@ -23,6 +23,7 @@ from datetime import datetime
 import os
 
 from src.event_scheduler import Event
+from .strings import UNSCHEDULED, EMPTY_TIME
 
 
 class EventTableWidget(QTableWidget):
@@ -267,8 +268,8 @@ class ConsoleWindow(QMainWindow):
 
             # Format time (handle None for unscheduled events)
             if event.time is None:
-                formatted_date = "Unscheduled"
-                formatted_time = ""  # Keep time blank for unscheduled
+                formatted_date = UNSCHEDULED
+                formatted_time = EMPTY_TIME  # Keep time blank for unscheduled
             else:
                 dt = event.time
                 formatted_date = dt.strftime("%Y-%m-%d")

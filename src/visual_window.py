@@ -3,6 +3,7 @@ from PySide6.QtCore import Qt, QUrl, QCoreApplication, Signal
 from PySide6.QtGui import QFont, QColor, QPalette
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
+from .strings import WINDOW_TITLE, DEFAULT_TITLE, DEFAULT_DESCRIPTION
 
 
 class VisualWindow(QMainWindow):
@@ -12,7 +13,7 @@ class VisualWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("SBD Livestream")
+        self.setWindowTitle(WINDOW_TITLE)
         self.resize(1280, 720)
         self.setFixedSize(1280, 720)  # Set fixed size to prevent resizing
 
@@ -42,7 +43,7 @@ class VisualWindow(QMainWindow):
         countdown_layout = QVBoxLayout(self.countdown_widget)
 
         # Add title label
-        self.title_label = QLabel("Sweet Bell Day!")
+        self.title_label = QLabel(DEFAULT_TITLE)
         self.title_label.setAlignment(Qt.AlignCenter)
         title_font = QFont()
         title_font.setPointSize(60)
@@ -51,7 +52,7 @@ class VisualWindow(QMainWindow):
         countdown_layout.addWidget(self.title_label)
 
         # Add description label
-        self.description_label = QLabel("Loading good times...")
+        self.description_label = QLabel(DEFAULT_DESCRIPTION)
         self.description_label.setAlignment(Qt.AlignCenter)
         self.description_label.setWordWrap(True)
         desc_font = QFont()
@@ -92,8 +93,8 @@ class VisualWindow(QMainWindow):
         self.set_dark_theme()
 
         # Track current event
-        self.current_title = "Sweet Bell Day!"
-        self.current_description = "Loading good times..."
+        self.current_title = DEFAULT_TITLE
+        self.current_description = DEFAULT_DESCRIPTION
 
     def set_dark_theme(self):
         palette = QPalette()

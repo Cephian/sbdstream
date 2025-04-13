@@ -1,12 +1,12 @@
 import os
 from datetime import datetime
 import sys
-from dateutil import parser
 
 from PySide6.QtCore import QObject, Signal, QTimer
 
 from src.csv_manager import CSVManager
 from src.event import Event
+from .strings import APP_NAME, NO_ACTIVE_EVENT
 
 
 class EventScheduler(QObject):
@@ -63,6 +63,10 @@ class EventScheduler(QObject):
         self.request_add_event.connect(self.add_event_data)
         self.request_remove_event.connect(self.remove_event_at_index)
         self.request_update_event_field.connect(self.update_event_field)
+
+        # Initialize current event info
+        self.current_title = APP_NAME
+        self.current_description = NO_ACTIVE_EVENT
 
     def load_events_from_csv(self, csv_path: str):
         """
@@ -343,16 +347,14 @@ class EventScheduler(QObject):
         # Countdown reached zero, trigger the next event
         self.countdown_timer.stop()
         print(f"Countdown reached zero, triggering event: {next_event.title}")
-        
+
         # Update current event state
         self.current_event_index = next_index
         self._active_event_object = next_event
-        
+
         # Emit signals to start the event
         self.event_started.emit(
-            next_event.video_path,
-            next_event.title,
-            next_event.description
+            next_event.video_path, next_event.title, next_event.description
         )
         self.current_event_signal.emit(self.current_event_index)
 
