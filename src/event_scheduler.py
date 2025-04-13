@@ -439,14 +439,28 @@ class EventScheduler(QObject):
     def _tick_countdown(self):
         """Decrements the countdown timer and emits the update signal."""
         now = datetime.now().replace(tzinfo=None)
-        next_event, _ = self.next_event(now)
+        next_event, next_index = self.next_event(now)
 
         if next_event:
             seconds_to_next = int(next_event.seconds_until(now))
             if seconds_to_next > 0:
                 self.update_countdown.emit(seconds_to_next)
             else:
+                # Countdown reached zero, trigger the next event
                 self.countdown_timer.stop()
+                print(f"Countdown reached zero, triggering event: {next_event.title}")
+                
+                # Update current event state
+                self.current_event_index = next_index
+                self._active_event_object = next_event
+                
+                # Emit signals to start the event
+                self.event_started.emit(
+                    next_event.video_path,
+                    next_event.title,
+                    next_event.description
+                )
+                self.current_event_signal.emit(self.current_event_index)
         else:
             self.countdown_timer.stop()
 
