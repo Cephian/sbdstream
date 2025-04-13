@@ -12,7 +12,7 @@ class VisualWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("SBDStream - Visual")
+        self.setWindowTitle("SBD Livestream")
         self.resize(1280, 720)
         self.setFixedSize(1280, 720)  # Set fixed size to prevent resizing
 
@@ -42,7 +42,7 @@ class VisualWindow(QMainWindow):
         countdown_layout = QVBoxLayout(self.countdown_widget)
 
         # Add title label
-        self.title_label = QLabel("SBDStream")
+        self.title_label = QLabel("Sweet Bell Day!")
         self.title_label.setAlignment(Qt.AlignCenter)
         title_font = QFont()
         title_font.setPointSize(60)
@@ -51,7 +51,7 @@ class VisualWindow(QMainWindow):
         countdown_layout.addWidget(self.title_label)
 
         # Add description label
-        self.description_label = QLabel("Loading scheduled events...")
+        self.description_label = QLabel("Good times.")
         self.description_label.setAlignment(Qt.AlignCenter)
         self.description_label.setWordWrap(True)
         desc_font = QFont()
@@ -68,9 +68,7 @@ class VisualWindow(QMainWindow):
         # Add countdown label
         self.countdown_heading = QLabel("Next event in:")
         self.countdown_heading.setAlignment(Qt.AlignCenter)
-        self.countdown_heading.setFixedHeight(
-            60
-        )  # Set fixed height to reduce vertical space
+        self.countdown_heading.setFixedHeight(60)
         countdown_font = QFont()
         countdown_font.setPointSize(16)
         self.countdown_heading.setFont(countdown_font)
@@ -79,7 +77,7 @@ class VisualWindow(QMainWindow):
         self.countdown_label = QLabel("--:--:--")
         self.countdown_label.setAlignment(Qt.AlignCenter)
         time_font = QFont()
-        time_font.setPointSize(36)
+        time_font.setPointSize(54)
         time_font.setBold(True)
         self.countdown_label.setFont(time_font)
         countdown_layout.addWidget(self.countdown_label)
@@ -124,7 +122,6 @@ class VisualWindow(QMainWindow):
 
         self.description_label.setStyleSheet("""
             color: #A7C7FF;
-            background-color: rgba(30, 40, 70, 0.5);
             padding: 10px;
         """)
 
