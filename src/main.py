@@ -42,7 +42,6 @@ def main():
     scheduler.current_event_signal.connect(console_window.update_current_event)
 
     # ConsoleWindow -> Scheduler (Requests & Triggers)
-    # console_window.event_edited.connect(scheduler.update_event) # Removed - handled by requests
     console_window.request_add_event.connect(scheduler.add_event_data)
     console_window.request_remove_event.connect(scheduler.remove_event_at_index)
     console_window.request_update_event_field.connect(scheduler.update_event_field)
@@ -71,7 +70,7 @@ def main():
     visual_window.show()
     console_window.show()
 
-    # Start the scheduler (this will now emit initial state signals)
+    # Start the scheduler
     scheduler.start()
 
     return app.exec()

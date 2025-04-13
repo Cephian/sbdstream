@@ -22,8 +22,6 @@ from PySide6.QtGui import QFont, QColor, QPalette, QBrush
 from datetime import datetime
 import os
 
-# Removed CSVManager import as ConsoleWindow no longer saves directly
-# from src.csv_manager import CSVManager
 from src.event_scheduler import Event
 
 
@@ -296,11 +294,13 @@ class ConsoleWindow(QMainWindow):
             # Apply style to other cells as well
             video_item = QTableWidgetItem(event.video_path)
             video_item.setBackground(cell_brush)
-            
+
             # Check if video file exists and is not empty
             if event.video_path and not os.path.isfile(event.video_path):
-                video_item.setForeground(QBrush(QColor("#FF0000")))  # Red text for invalid video paths
-            
+                video_item.setForeground(
+                    QBrush(QColor("#FF0000"))
+                )  # Red text for invalid video paths
+
             title_item = QTableWidgetItem(event.title)
             title_item.setBackground(cell_brush)
             desc_item = QTableWidgetItem(event.description)

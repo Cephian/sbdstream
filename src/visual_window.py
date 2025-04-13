@@ -51,7 +51,7 @@ class VisualWindow(QMainWindow):
         countdown_layout.addWidget(self.title_label)
 
         # Add description label
-        self.description_label = QLabel("Good times.")
+        self.description_label = QLabel("Loading good times...")
         self.description_label.setAlignment(Qt.AlignCenter)
         self.description_label.setWordWrap(True)
         desc_font = QFont()
@@ -92,8 +92,8 @@ class VisualWindow(QMainWindow):
         self.set_dark_theme()
 
         # Track current event
-        self.current_title = "SBDStream"
-        self.current_description = "Loading scheduled events..."
+        self.current_title = "Sweet Bell Day!"
+        self.current_description = "Loading good times..."
 
     def set_dark_theme(self):
         palette = QPalette()
