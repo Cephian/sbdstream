@@ -2,12 +2,6 @@
 
 A Python application using PySide6 and Qt6 that reads a CSV file to schedule and display video events with accompanying information.
 
-## Requirements
-
-- Python 3.8+
-- PySide6 (Qt6)
-- python-dateutil
-
 ## Installation
 
 1. Clone this repository
@@ -18,17 +12,10 @@ A Python application using PySide6 and Qt6 that reads a CSV file to schedule and
 
 ## Usage
 
-There are two ways to run the application:
-
-1. Using the test script:
-   ```
-   python test_app.py
-   ```
-
-2. Running the main module directly:
-   ```
-   python src/main.py
-   ```
+Run the application with a CSV file containing the event schedule:
+```
+python src/main.py schedule.csv
+```
 
 ## Features
 
@@ -46,43 +33,31 @@ There are two ways to run the application:
   - Add new events with an intuitive dialog
   - Remove events
   - Edit event details in real-time
-  - Import/Export CSV files
-  - Save changes back to the original CSV
+  - Real-time updates to the original CSV file
+  - Trigger events manually at any time
 
 ## CSV File Format
 
 The application reads a CSV file with the following columns:
-- **Time:** When to play the video (ISO format timestamp)
+- **Date:** The date of the event (YYYY-MM-DD format)
+- **Time:** The time of the event (HH:MM:SS format)
 - **Video:** Path to the video file
 - **Title:** Title of the video/event
 - **Description:** Description of the video/event
 
 Example:
 ```
-Time,Video,Title,Description
-2023-05-01T12:00:00,/path/to/video1.mp4,Introduction,Welcome to the video stream
-2023-05-01T12:15:00,/path/to/video2.mp4,Second Video,This is the second video in our series
+Date,Time,Video,Title,Description
+2025-04-12,15:46:24,data/videos/crazy_yelling_challenge.mp4,Crazy Yelling Challenge,Go outside and yell at random people for 5 minutes
+2025-04-12,16:00:00,data/videos/fridge_surfer.mp4,Fridge Surfer Challenge,Spend one hour sitting in your fridge
 ```
-
-## Development
-
-The application is structured as follows:
-
-- `src/` - Source code
-  - `main.py` - Main entry point
-  - `visual_window.py` - Visual window implementation
-  - `console_window.py` - Console window implementation
-  - `event_scheduler.py` - Event scheduling logic
-  - `csv_manager.py` - CSV file handling
-- `data/` - Default location for CSV files
-- `test_app.py` - Test script
 
 ## Cross-Platform Support
 
 The application is designed to work on:
-- Linux (primary platform)
-- macOS
-- Windows
+- Linux
+- macOS (Untested)
+- Windows (Untested)
 
 ## Using Nix
 
