@@ -292,28 +292,32 @@ class EventScheduler(QObject):
         now = datetime.now().replace(tzinfo=None)
         next_event, next_event_index_in_all = self._find_next_scheduled_event(now)
 
-        if next_event and next_event.time <= now:
-            # Time for the next scheduled event has arrived.
-            # Check if it's different from the currently active event (if any)
-            # or if no event is active.
-            is_new_event = (
-                self._active_event_object is None
-                or next_event is not self._active_event_object
-            )
+        if not next_event or next_event.time > now:
+            return
 
-            if is_new_event:
-                print(f"Scheduled event starting: {next_event.title}")
-                if self.countdown_timer.isActive():
-                    self.countdown_timer.stop()
-                    self.seconds_to_next = 0  # Reset countdown
+        # Time for the next scheduled event has arrived.
+        # Check if it's different from the currently active event (if any)
+        # or if no event is active.
+        is_new_event = (
+            self._active_event_object is None
+            or next_event is not self._active_event_object
+        )
 
-                self.current_event_index = next_event_index_in_all
-                self._active_event_object = next_event  # Update active event
+        if not is_new_event:
+            return
 
-                self.event_started.emit(
-                    next_event.video_path, next_event.title, next_event.description
-                )
-                self.current_event_signal.emit(self.current_event_index)
+        print(f"Scheduled event starting: {next_event.title}")
+        if self.countdown_timer.isActive():
+            self.countdown_timer.stop()
+            self.seconds_to_next = 0  # Reset countdown
+
+        self.current_event_index = next_event_index_in_all
+        self._active_event_object = next_event  # Update active event
+
+        self.event_started.emit(
+            next_event.video_path, next_event.title, next_event.description
+        )
+        self.current_event_signal.emit(self.current_event_index)
 
     def trigger_event(self, event_index: int):
         """
@@ -324,30 +328,31 @@ class EventScheduler(QObject):
         Args:
             event_index: The index of the event to trigger in the `self.events` list.
         """
-        if 0 <= event_index < len(self.events):
-            triggered_event = self.events[event_index]
-            print(
-                f"Manually triggering event: {triggered_event.title} (Index: {event_index})"
-            )
-
-            if self.countdown_timer.isActive():
-                self.countdown_timer.stop()
-                self.seconds_to_next = 0  # Reset countdown
-
-            self.current_event_index = event_index
-            self._active_event_object = triggered_event  # Update active event
-
-            self.event_started.emit(
-                triggered_event.video_path,
-                triggered_event.title,
-                triggered_event.description,
-            )
-            # Emit signal *after* index is updated and active event set
-            self._emit_update_signals()
-        else:
+        if not (0 <= event_index < len(self.events)):
             print(
                 f"Error: Invalid event index {event_index} triggered.", file=sys.stderr
             )
+            return
+
+        triggered_event = self.events[event_index]
+        print(
+            f"Manually triggering event: {triggered_event.title} (Index: {event_index})"
+        )
+
+        if self.countdown_timer.isActive():
+            self.countdown_timer.stop()
+            self.seconds_to_next = 0  # Reset countdown
+
+        self.current_event_index = event_index
+        self._active_event_object = triggered_event  # Update active event
+
+        self.event_started.emit(
+            triggered_event.video_path,
+            triggered_event.title,
+            triggered_event.description,
+        )
+        # Emit signal *after* index is updated and active event set
+        self._emit_update_signals()
 
     def handle_video_finished(self):
         """
@@ -379,20 +384,7 @@ class EventScheduler(QObject):
             current_title = self._active_event_object.title
             current_description = self._active_event_object.description
 
-        if next_event:
-            seconds_to_next = int(next_event.seconds_until(now))
-            print(f"Next scheduled event: '{next_event.title}' in {seconds_to_next}s")
-            self.event_finished.emit(
-                next_event.title,
-                seconds_to_next,
-                current_title,
-                current_description,
-            )
-            if seconds_to_next > 0 and not self.countdown_timer.isActive():
-                self.countdown_timer.start(1000)
-            elif seconds_to_next <= 0 and self.countdown_timer.isActive():
-                self.countdown_timer.stop()  # Stop if already passed
-        else:
+        if not next_event:
             # No more scheduled events
             print("No more scheduled events.")
             if self.countdown_timer.isActive():
@@ -403,6 +395,20 @@ class EventScheduler(QObject):
                 current_title,
                 current_description,
             )
+            return
+
+        seconds_to_next = int(next_event.seconds_until(now))
+        print(f"Next scheduled event: '{next_event.title}' in {seconds_to_next}s")
+        self.event_finished.emit(
+            next_event.title,
+            seconds_to_next,
+            current_title,
+            current_description,
+        )
+        if seconds_to_next > 0 and not self.countdown_timer.isActive():
+            self.countdown_timer.start(1000)
+        elif seconds_to_next <= 0 and self.countdown_timer.isActive():
+            self.countdown_timer.stop()  # Stop if already passed
 
     def _find_next_scheduled_event(
         self, reference_time: datetime
@@ -423,46 +429,48 @@ class EventScheduler(QObject):
                 next_scheduled_event = event
                 break
 
-        if next_scheduled_event:
-            try:
-                index_in_all = self.events.index(next_scheduled_event)
-                return next_scheduled_event, index_in_all
-            except ValueError:
-                print(
-                    f"Error: Could not find next scheduled event '{next_scheduled_event.title}' in main list.",
-                    file=sys.stderr,
-                )
-                return None, -1  # Consistency issue
-        else:
+        if not next_scheduled_event:
             return None, -1  # No more scheduled events
+
+        try:
+            index_in_all = self.events.index(next_scheduled_event)
+            return next_scheduled_event, index_in_all
+        except ValueError:
+            print(
+                f"Error: Could not find next scheduled event '{next_scheduled_event.title}' in main list.",
+                file=sys.stderr,
+            )
+            return None, -1  # Consistency issue
 
     def _tick_countdown(self):
         """Decrements the countdown timer and emits the update signal."""
         now = datetime.now().replace(tzinfo=None)
         next_event, next_index = self.next_event(now)
 
-        if next_event:
-            seconds_to_next = int(next_event.seconds_until(now))
-            if seconds_to_next > 0:
-                self.update_countdown.emit(seconds_to_next)
-            else:
-                # Countdown reached zero, trigger the next event
-                self.countdown_timer.stop()
-                print(f"Countdown reached zero, triggering event: {next_event.title}")
-                
-                # Update current event state
-                self.current_event_index = next_index
-                self._active_event_object = next_event
-                
-                # Emit signals to start the event
-                self.event_started.emit(
-                    next_event.video_path,
-                    next_event.title,
-                    next_event.description
-                )
-                self.current_event_signal.emit(self.current_event_index)
-        else:
+        if not next_event:
             self.countdown_timer.stop()
+            return
+
+        seconds_to_next = int(next_event.seconds_until(now))
+        if seconds_to_next > 0:
+            self.update_countdown.emit(seconds_to_next)
+            return
+
+        # Countdown reached zero, trigger the next event
+        self.countdown_timer.stop()
+        print(f"Countdown reached zero, triggering event: {next_event.title}")
+        
+        # Update current event state
+        self.current_event_index = next_index
+        self._active_event_object = next_event
+        
+        # Emit signals to start the event
+        self.event_started.emit(
+            next_event.video_path,
+            next_event.title,
+            next_event.description
+        )
+        self.current_event_signal.emit(self.current_event_index)
 
     # --- New Methods for Handling UI Requests ---
 
@@ -605,7 +613,6 @@ class EventScheduler(QObject):
                 f"Error updating event field (Index: {index}, Column: {column}, Value: '{value}'): {e}",
                 file=sys.stderr,
             )
-            # Optionally revert or signal an error? For now, just log and don't save.
             return
 
         # Check if the event's schedule status changed (scheduled <-> unscheduled) or time changed
@@ -614,40 +621,45 @@ class EventScheduler(QObject):
             event_to_update.time is None
         )
 
-        if schedule_status_changed or time_changed:
-            # Need to potentially move event between lists and rebuild
-            # 1. Remove from original specific list
-            if original_time:
-                if event_to_update in self.scheduled_events:
-                    # It might have been removed already if time changed and it was re-added below
-                    # Check existence before removal
-                    self.scheduled_events.remove(event_to_update)
-            else:
-                if event_to_update in self.unscheduled_events:
-                    self.unscheduled_events.remove(event_to_update)
+        if not (schedule_status_changed or time_changed):
+            # Save changes regardless of whether time changed (e.g., title update)
+            self.save_to_csv()
+            # Recalculate current index as list order might have changed
+            self._recalculate_current_index()
+            # Schedule the UI update signals slightly later to avoid conflicts with table editor commits
+            QTimer.singleShot(0, self._emit_update_signals)
+            return
 
-            # 2. Add to the correct new specific list
-            if event_to_update.time:
-                self.scheduled_events.append(event_to_update)
-                self.scheduled_events.sort(key=lambda x: x.time)
-            else:
-                self.unscheduled_events.append(event_to_update)
+        # Need to potentially move event between lists and rebuild
+        # 1. Remove from original specific list
+        if original_time:
+            if event_to_update in self.scheduled_events:
+                # It might have been removed already if time changed and it was re-added below
+                # Check existence before removal
+                self.scheduled_events.remove(event_to_update)
+        else:
+            if event_to_update in self.unscheduled_events:
+                self.unscheduled_events.remove(event_to_update)
 
-            # 3. Rebuild main list
-            self.events = self.scheduled_events + self.unscheduled_events
+        # 2. Add to the correct new specific list
+        if event_to_update.time:
+            self.scheduled_events.append(event_to_update)
+            self.scheduled_events.sort(key=lambda x: x.time)
+        else:
+            self.unscheduled_events.append(event_to_update)
 
-        # Save changes regardless of whether time changed (e.g., title update)
+        # 3. Rebuild main list
+        self.events = self.scheduled_events + self.unscheduled_events
+
+        # Save changes
         self.save_to_csv()
 
         # Recalculate current index as list order might have changed
         self._recalculate_current_index()
 
         # Update countdown state if timing potentially changed
-        if time_changed or schedule_status_changed:
-            self._update_state_after_event()
+        self._update_state_after_event()
 
-        # Emit signals to update UI
-        # self._emit_update_signals() # Don't emit directly
         # Schedule the UI update signals slightly later to avoid conflicts with table editor commits
         QTimer.singleShot(0, self._emit_update_signals)
 
