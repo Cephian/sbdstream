@@ -2,7 +2,6 @@
 import sys
 import os
 import argparse
-from datetime import datetime
 from PySide6.QtWidgets import QApplication
 from src.visual_window import VisualWindow
 from src.console_window import ConsoleWindow
@@ -51,7 +50,7 @@ def main():
 
     # VisualWindow -> Scheduler
     visual_window.video_finished.connect(scheduler.handle_video_finished)
-    
+
     # ConsoleWindow -> VisualWindow (Text Updates)
     console_window.text_updated.connect(visual_window.update_text)
 

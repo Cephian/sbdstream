@@ -8,7 +8,7 @@ from PySide6.QtMultimediaWidgets import QVideoWidget
 class VisualWindow(QMainWindow):
     # Signal emitted when video playback ends
     video_finished = Signal()
-    
+
     def __init__(self):
         super().__init__()
 
@@ -31,9 +31,11 @@ class VisualWindow(QMainWindow):
         # Create media player
         self.media_player = QMediaPlayer()
         self.media_player.setVideoOutput(self.video_widget)
-        
+
         # Connect the media player's playback state change to our handler
-        self.media_player.playbackStateChanged.connect(self.handle_playback_state_change)
+        self.media_player.playbackStateChanged.connect(
+            self.handle_playback_state_change
+        )
 
         # Create countdown widget
         self.countdown_widget = QWidget()
@@ -66,7 +68,9 @@ class VisualWindow(QMainWindow):
         # Add countdown label
         self.countdown_heading = QLabel("Next event in:")
         self.countdown_heading.setAlignment(Qt.AlignCenter)
-        self.countdown_heading.setFixedHeight(60)  # Set fixed height to reduce vertical space
+        self.countdown_heading.setFixedHeight(
+            60
+        )  # Set fixed height to reduce vertical space
         countdown_font = QFont()
         countdown_font.setPointSize(16)
         self.countdown_heading.setFont(countdown_font)

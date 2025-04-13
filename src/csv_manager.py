@@ -81,7 +81,7 @@ class CSVManager:
 
                 # Check if this is an unscheduled event (no time)
                 is_unscheduled = "Time" not in row or not row["Time"].strip()
-                
+
                 if is_unscheduled:
                     # This is an unscheduled event, set time to None
                     event = {

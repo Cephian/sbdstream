@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QDateTime, QCoreApplication
 from PySide6.QtGui import QFont, QColor, QPalette, QBrush
-from dateutil import parser
 from datetime import datetime
 
 # Removed CSVManager import as ConsoleWindow no longer saves directly
@@ -134,12 +133,13 @@ class AddEventDialog(QDialog):
             time_str_part = self.time_edit.dateTime().toString("HH:mm:ss")
             # Combine date and time correctly for ISO format
             try:
-                dt = QDateTime.fromString(f"{date_str} {time_str_part}", "yyyy-MM-dd HH:mm:ss")
-                time_str = dt.toString(Qt.ISODate) # Produces ISO 8601 format
+                dt = QDateTime.fromString(
+                    f"{date_str} {time_str_part}", "yyyy-MM-dd HH:mm:ss"
+                )
+                time_str = dt.toString(Qt.ISODate)  # Produces ISO 8601 format
             except Exception:
                 # Fallback or handle error if parsing fails
-                time_str = f"{date_str}T{time_str_part}" # Less robust fallback
-
+                time_str = f"{date_str}T{time_str_part}"  # Less robust fallback
 
         return {
             "time": time_str,
@@ -162,9 +162,9 @@ class AddEventDialog(QDialog):
 
 class ConsoleWindow(QMainWindow):
     # Signals to request actions from the EventScheduler
-    request_add_event = Signal(dict)       # event_data dictionary
-    request_remove_event = Signal(int)     # index to remove
-    request_update_event_field = Signal(int, int, str) # index, column, value
+    request_add_event = Signal(dict)  # event_data dictionary
+    request_remove_event = Signal(int)  # index to remove
+    request_update_event_field = Signal(int, int, str)  # index, column, value
 
     # Signal to trigger an event immediately (handled by EventScheduler)
     event_triggered = Signal(int)  # index of event to trigger
@@ -230,8 +230,8 @@ class ConsoleWindow(QMainWindow):
         # Flags to prevent recursive updates during table population/highlighting
         self._is_updating_table = False
         self._is_highlighting = False
-        self._current_event_index = -1 # Index within the _current_events list
-        self.csv_path = None # Still needed for context, but not direct saving
+        self._current_event_index = -1  # Index within the _current_events list
+        self.csv_path = None  # Still needed for context, but not direct saving
 
     def set_dark_theme(self):
         palette = QPalette()
@@ -249,7 +249,6 @@ class ConsoleWindow(QMainWindow):
         palette.setColor(QPalette.HighlightedText, Qt.black)
         self.setPalette(palette)
 
-
     # --- Slots for EventScheduler Signals ---
 
     def update_events_display(self, events: list[Event]):
@@ -257,8 +256,8 @@ class ConsoleWindow(QMainWindow):
         Slot connected to EventScheduler.all_events_signal.
         Updates the internal event list and refreshes the table display.
         """
-        self._is_updating_table = True # Prevent cellChanged during population
-        self._current_events = events # Store the latest list
+        self._is_updating_table = True  # Prevent cellChanged during population
+        self._current_events = events  # Store the latest list
 
         # Clear table
         self.event_table.setRowCount(0)
@@ -270,7 +269,7 @@ class ConsoleWindow(QMainWindow):
             # Format time (handle None for unscheduled events)
             if event.time is None:
                 formatted_date = "Unscheduled"
-                formatted_time = "" # Keep time blank for unscheduled
+                formatted_time = ""  # Keep time blank for unscheduled
             else:
                 dt = event.time
                 formatted_date = dt.strftime("%Y-%m-%d")
@@ -278,7 +277,7 @@ class ConsoleWindow(QMainWindow):
 
             # Create order item (initially empty)
             order_item = QTableWidgetItem("")
-            order_item.setFlags(order_item.flags() & ~Qt.ItemIsEditable) # Not editable
+            order_item.setFlags(order_item.flags() & ~Qt.ItemIsEditable)  # Not editable
             order_item.setBackground(QBrush(QColor("#2A4A4A")))
             self.event_table.setItem(i, 0, order_item)
 
@@ -301,7 +300,6 @@ class ConsoleWindow(QMainWindow):
             desc_item = QTableWidgetItem(event.description)
             desc_item.setBackground(cell_brush)
 
-
             self.event_table.setItem(i, 1, date_item)
             self.event_table.setItem(i, 2, time_item)
             self.event_table.setItem(i, 3, video_item)
@@ -312,7 +310,6 @@ class ConsoleWindow(QMainWindow):
 
         # Re-apply highlighting and order numbers based on the potentially updated current_index
         self._update_visual_state()
-
 
     def update_current_event(self, index: int):
         """
@@ -336,7 +333,6 @@ class ConsoleWindow(QMainWindow):
             # If index is invalid (-1), clear the text display
             self.text_updated.emit("SBDStream", "Waiting for event...")
 
-
     def _update_visual_state(self):
         """
         Update the visual state of the event table (highlighting and order numbers)
@@ -355,12 +351,13 @@ class ConsoleWindow(QMainWindow):
         # Reset highlighting flag
         self._is_highlighting = False
 
-
     def _update_highlighting(self):
         """Update the visual highlighting of the current event in the table."""
         # Reset all row background colors first (respecting unscheduled style)
         for i in range(self.event_table.rowCount()):
-            is_unscheduled = (i < len(self._current_events) and self._current_events[i].time is None)
+            is_unscheduled = (
+                i < len(self._current_events) and self._current_events[i].time is None
+            )
             base_brush = QBrush()
             if is_unscheduled:
                 base_brush = QBrush(QColor("#3A2A4A"))
@@ -368,16 +365,17 @@ class ConsoleWindow(QMainWindow):
             for j in range(1, self.event_table.columnCount()):  # Skip Order column (0)
                 item = self.event_table.item(i, j)
                 if item:
-                    item.setBackground(base_brush) # Reset to base (or unscheduled) color
+                    item.setBackground(
+                        base_brush
+                    )  # Reset to base (or unscheduled) color
 
         # Highlight the current event row (overriding base color)
         if 0 <= self._current_event_index < self.event_table.rowCount():
-            highlight_brush = QBrush(QColor(42, 130, 218)) # Use theme highlight color
+            highlight_brush = QBrush(QColor(42, 130, 218))  # Use theme highlight color
             for j in range(1, self.event_table.columnCount()):
                 item = self.event_table.item(self._current_event_index, j)
                 if item:
                     item.setBackground(highlight_brush)
-
 
     def _update_order_numbers(self):
         """Update the order numbers in the first column based on current time and index."""
@@ -391,33 +389,34 @@ class ConsoleWindow(QMainWindow):
         now = datetime.now().replace(tzinfo=None)
 
         # If there's no valid current event, we can't calculate relative order easily
-        if self._current_event_index < 0 or self._current_event_index >= len(self._current_events):
+        if self._current_event_index < 0 or self._current_event_index >= len(
+            self._current_events
+        ):
             print("No current event to base ordering on.")
             # Optionally number all future events from 1? Or leave blank.
             # Let's number future scheduled events starting from 1 for clarity.
             future_events = []
             unscheduled_events = []
             for i, event in enumerate(self._current_events):
-                 if event.time is not None and event.time > now:
-                     future_events.append((i, event.time))
-                 elif event.time is None:
-                     unscheduled_events.append(i)
+                if event.time is not None and event.time > now:
+                    future_events.append((i, event.time))
+                elif event.time is None:
+                    unscheduled_events.append(i)
 
             future_events.sort(key=lambda x: x[1])
             order_num = 1
             for row_idx, _ in future_events:
-                 order_item = self.event_table.item(row_idx, 0)
-                 if order_item:
-                     order_item.setText(str(order_num))
-                 order_num += 1
+                order_item = self.event_table.item(row_idx, 0)
+                if order_item:
+                    order_item.setText(str(order_num))
+                order_num += 1
             # Optionally number unscheduled after future?
             # for row_idx in unscheduled_events:
             #     order_item = self.event_table.item(row_idx, 0)
             #     if order_item:
             #         order_item.setText(f"U{order_num}") # Indicate unscheduled
             #     order_num += 1
-            return # Exit early
-
+            return  # Exit early
 
         # Set "Now" for the current event
         current_order_item = self.event_table.item(self._current_event_index, 0)
@@ -461,30 +460,32 @@ class ConsoleWindow(QMainWindow):
         for row_idx in unscheduled_events:
             order_item = self.event_table.item(row_idx, 0)
             if order_item:
-                 # Simple numbering after scheduled, could use 'U' prefix if needed
-                 order_item.setText(f"U{next_order}")
-                 next_order += 1
+                # Simple numbering after scheduled, could use 'U' prefix if needed
+                order_item.setText(f"U{next_order}")
+                next_order += 1
 
         # Special case: if the "Now" event is *also* in the future relative to 'now'
         # (e.g. triggered early), add its future order number.
         if current_event_time and current_event_time > now:
-             future_order_for_current = -1
-             temp_order = 1
-             # Find its position in the sorted future list
-             for idx, t in future_events:
-                 if idx == self._current_event_index: # Should not happen due to skip above, but check
-                     future_order_for_current = temp_order
-                     break
-                 if t == current_event_time: # Find the event itself
-                     future_order_for_current = temp_order
-                     break
-                 temp_order += 1
-             # If we found its future order, append it
-             if future_order_for_current > 0 and current_order_item:
-                 current_text = current_order_item.text()
-                 current_order_item.setText(f"{current_text}, {future_order_for_current}")
-
-
+            future_order_for_current = -1
+            temp_order = 1
+            # Find its position in the sorted future list
+            for idx, t in future_events:
+                if (
+                    idx == self._current_event_index
+                ):  # Should not happen due to skip above, but check
+                    future_order_for_current = temp_order
+                    break
+                if t == current_event_time:  # Find the event itself
+                    future_order_for_current = temp_order
+                    break
+                temp_order += 1
+            # If we found its future order, append it
+            if future_order_for_current > 0 and current_order_item:
+                current_text = current_order_item.text()
+                current_order_item.setText(
+                    f"{current_text}, {future_order_for_current}"
+                )
 
     # --- Event Handlers for UI Actions ---
 
@@ -493,8 +494,8 @@ class ConsoleWindow(QMainWindow):
         if (
             self._is_updating_table
             or self._is_highlighting
-            or row >= len(self._current_events) # Check against internal list size
-            or column == 0 # Ignore order column changes
+            or row >= len(self._current_events)  # Check against internal list size
+            or column == 0  # Ignore order column changes
         ):
             return
 
@@ -509,7 +510,6 @@ class ConsoleWindow(QMainWindow):
         # Scheduler will handle validation, list updates, saving, and emitting update signals
         self.request_update_event_field.emit(row, column, value)
 
-
     def add_event(self):
         dialog = AddEventDialog(self)
 
@@ -521,7 +521,6 @@ class ConsoleWindow(QMainWindow):
             self.request_add_event.emit(event_data)
             # The scheduler will handle adding, saving, and sending signals
             # back to update_events_display and update_current_event.
-
 
     def remove_event(self):
         # Get selected row
@@ -538,10 +537,10 @@ class ConsoleWindow(QMainWindow):
 
         # Ensure the row index is valid for the current event list
         if not (0 <= row < len(self._current_events)):
-             QMessageBox.warning(
+            QMessageBox.warning(
                 self, "Selection Error", "Invalid selection or event list out of sync."
             )
-             return
+            return
 
         # Confirm removal
         event_title_to_remove = self._current_events[row].title
@@ -559,7 +558,6 @@ class ConsoleWindow(QMainWindow):
             # The scheduler will handle removal, saving, and sending signals
             # back to update_events_display and update_current_event.
 
-
     def trigger_event(self):
         """
         Request the EventScheduler to trigger the selected event.
@@ -576,10 +574,10 @@ class ConsoleWindow(QMainWindow):
 
         # Ensure the row index is valid
         if not (0 <= selected_row < len(self._current_events)):
-             QMessageBox.warning(
+            QMessageBox.warning(
                 self, "Selection Error", "Invalid selection or event list out of sync."
             )
-             return
+            return
 
         # Confirm with the user
         event_title_to_trigger = self._current_events[selected_row].title
@@ -597,7 +595,6 @@ class ConsoleWindow(QMainWindow):
             # Scheduler will update the current_event_index, start the video,
             # and emit current_event_signal, which will cause update_current_event
             # to run, updating the highlight, order, and text display.
-
 
     def closeEvent(self, event):
         # Quit the application when this window is closed
