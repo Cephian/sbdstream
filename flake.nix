@@ -1,5 +1,5 @@
 {
-  description = "SBDStream - PySide6 application for streaming and scheduling";
+  description = "SBDStream - Streaming and scheduling app for Sweet Bell Day";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -38,7 +38,7 @@
             pythonPackages.pyside6
             pythonPackages.python-dateutil
             pythonPackages.pip
-            pythonPackages.black
+            pythonPackages.ruff
             pythonPackages.pylint
             pythonPackages.pytest
             kdePackages.qtwayland
