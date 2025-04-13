@@ -98,6 +98,25 @@ class Event:
         """Set the description of the event."""
         self._description = value
 
+    def seconds_until(self, reference_time: datetime | None = None) -> float | None:
+        """
+        Returns the number of seconds until this event from the reference time.
+        Returns None if the event is unscheduled.
+
+        Args:
+            reference_time: The time to calculate seconds from. If None, uses current time.
+
+        Returns:
+            float | None: Number of seconds until the event, or None if unscheduled
+        """
+        if self._time is None:
+            return None
+
+        if reference_time is None:
+            reference_time = datetime.now().replace(tzinfo=None)
+
+        return (self._time - reference_time).total_seconds()
+
 
 class EventScheduler(QObject):
     """
@@ -147,7 +166,6 @@ class EventScheduler(QObject):
         self.schedule_check_timer.timeout.connect(self._check_schedule)
         self.countdown_timer = QTimer(self)
         self.countdown_timer.timeout.connect(self._tick_countdown)
-        self.seconds_to_next: int = 0
         self.csv_path: str | None = None
 
         # Connect internal request signals to handlers
@@ -353,9 +371,7 @@ class EventScheduler(QObject):
         It sets up the transition *to* the next event's waiting period.
         """
         now = datetime.now().replace(tzinfo=None)
-        next_event, _ = self._find_next_scheduled_event(
-            now
-        )  # We only need the event obj here
+        next_event, next_index = self.next_event(now)
 
         current_title = "SBDStream"
         current_description = "No active event"
@@ -364,8 +380,7 @@ class EventScheduler(QObject):
             current_description = self._active_event_object.description
 
         if next_event:
-            seconds_to_next = max(0, int((next_event.time - now).total_seconds()))
-            self.seconds_to_next = seconds_to_next
+            seconds_to_next = int(next_event.seconds_until(now))
             print(f"Next scheduled event: '{next_event.title}' in {seconds_to_next}s")
             self.event_finished.emit(
                 next_event.title,
@@ -380,7 +395,6 @@ class EventScheduler(QObject):
         else:
             # No more scheduled events
             print("No more scheduled events.")
-            self.seconds_to_next = 0
             if self.countdown_timer.isActive():
                 self.countdown_timer.stop()
             self.event_finished.emit(
@@ -424,13 +438,17 @@ class EventScheduler(QObject):
 
     def _tick_countdown(self):
         """Decrements the countdown timer and emits the update signal."""
-        if self.seconds_to_next > 0:
-            self.seconds_to_next -= 1
-            self.update_countdown.emit(self.seconds_to_next)
-            # No need to stop timer here, _check_schedule handles the transition
-        # We don't need an else block to stop the timer,
-        # as _update_state_after_event or _check_schedule should handle stopping it
-        # when a new event starts or the schedule ends.
+        now = datetime.now().replace(tzinfo=None)
+        next_event, _ = self.next_event(now)
+
+        if next_event:
+            seconds_to_next = int(next_event.seconds_until(now))
+            if seconds_to_next > 0:
+                self.update_countdown.emit(seconds_to_next)
+            else:
+                self.countdown_timer.stop()
+        else:
+            self.countdown_timer.stop()
 
     # --- New Methods for Handling UI Requests ---
 
@@ -704,3 +722,35 @@ class EventScheduler(QObject):
             "title": event.title,
             "description": event.description,
         }
+
+    def next_event(
+        self, reference_time: datetime | None = None
+    ) -> tuple[Event | None, int]:
+        """
+        Finds the next scheduled event after the reference time.
+
+        Args:
+            reference_time: The time to find events after. If None, uses current time.
+
+        Returns:
+            tuple[Event | None, int]: The next event and its index in self.events, or (None, -1) if no next event
+        """
+        if reference_time is None:
+            reference_time = datetime.now().replace(tzinfo=None)
+
+        next_event = None
+        next_index = -1
+        min_seconds = float("inf")
+
+        for i, event in enumerate(self.events):
+            seconds_until = event.seconds_until(reference_time)
+            if (
+                seconds_until is not None
+                and seconds_until > 0
+                and seconds_until < min_seconds
+            ):
+                next_event = event
+                next_index = i
+                min_seconds = seconds_until
+
+        return next_event, next_index
